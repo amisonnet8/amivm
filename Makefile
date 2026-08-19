@@ -4,7 +4,7 @@ BINARY := amivm
 PKG    := ./cmd/amivm
 GO     := go
 
-.PHONY: all build install test fmt vet tidy clean help
+.PHONY: all build install unit-test test fmt vet tidy clean help
 
 all: build ## デフォルトターゲット(ビルドのみ)
 
@@ -14,7 +14,10 @@ build: ## amivmバイナリをビルドする
 install: ## amivmバイナリをGOBIN($GOPATH/bin)へインストールする(xxlang等の外部プロジェクトから使う場合はこちら)
 	$(GO) install $(PKG)
 
-test: build ## test_ir/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
+unit-test: ## go testでcmd/amivm配下のユニットテストを実行する
+	$(GO) test ./...
+
+test: build unit-test ## unit-test + test_ir/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
 	@set -e; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT; \

@@ -431,14 +431,48 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
 ast.File
   → format.Node でテキスト化
   → imports.Process で import解決
-  → parser.ParseFile で再パース
-  → go/types で型チェック
+  → parser.ParseFile で再パース(構文エラー検出)
+  → typeCheck(go/packages経由)で型チェック
       - 未使用変数エラーのみ検出 → 6節の再帰探索で `_ = x` を挿入して再チェック(最大5回ループ)
       - それ以外のエラー → 即座に失敗として返す
   → os.WriteFile で出力先パスへ書き出し
 ```
 
-型の整合性・未定義識別子・関数シグネチャの不一致・メソッドの存在チェックなどは、AMIVM側で検証せず`go/types`に委ねている。
+型の整合性・未定義識別子・関数シグネチャの不一致・メソッドの存在チェックなどは、AMIVM側で検証せず`go/types`(`typeCheck`関数経由)に委ねている。
+
+### `typeCheck` — go/packagesによるモジュール対応の型チェック
+
+以前は`types.Config{Importer: importer.Default()}`を直接使っていたが、`importer.Default()`はGOROOT配下の標準ライブラリしか解決できず、Goモジュールを一切理解しない(GOPATH時代の仕組みをそのまま使っている)。そのため、生成したコードが標準ライブラリ以外のパッケージ(利用側言語実装が用意する独自のランタイムライブラリ等)を参照すると、実際には`go build`で正しくビルドできるコードであっても、amivm内部の型チェックだけが「could not import」で失敗するという問題があった。加えて、`go/types`の`Check`に生成した1ファイルだけを単独で渡していたため、出力先と同じディレクトリ・同じpackageに置かれた別のGoファイル(手書きのランタイムコード等)で定義された識別子も常に「undefined」になっていた。
+
+`typeCheck`はこれを`golang.org/x/tools/go/packages`(内部で`go list`を使う、Goモジュールを正しく理解するパッケージローダー)に置き換えることで解決している。
+
+```go
+func typeCheck(outputPath string, resolved []byte) (unusedVars []string, otherErrs []string, err error) {
+    absOutputPath, err := filepath.Abs(outputPath)
+    // ...
+    cfg := &packages.Config{
+        Mode: packages.NeedName | packages.NeedTypes | packages.NeedTypesInfo |
+            packages.NeedImports | packages.NeedDeps | packages.NeedSyntax,
+        Dir:     filepath.Dir(absOutputPath),
+        Overlay: map[string][]byte{absOutputPath: resolved},
+    }
+    pkgs, err := packages.Load(cfg, "file="+absOutputPath)
+    // ...
+}
+```
+
+ポイントは2つ。
+
+1. **`Overlay`でディスクに書き込まずにチェックする**。`resolved`(まだファイルに書き出していない、生成した最新のGoソース)を`absOutputPath`の内容として差し替えるため、実際にファイルを書かなくても「そこにそのファイルがあるとしたら」という前提でパッケージ全体を読み込める。`Overlay`のキーは`go/packages`の仕様上絶対パスである必要があるため、`filepath.Abs`で変換してから渡す(相対パスのままだとファイルが存在しない扱いになり解決に失敗する)
+2. **`"file="+absOutputPath`という問い合わせにより、出力先ファイルが属するパッケージ全体(同じディレクトリの他の.goファイルを含む)が読み込まれる**。これにより「同じpackage内の手書きファイルで定義された関数」も「同じモジュール内の別packageの関数」も、`go build`が実際に解決できるのと同じルールで解決できるようになる
+
+ただし、この仕組みが機能するのは**出力先ディレクトリがGoモジュール(`go.mod`が存在する)である場合**に限られる。`go.mod`が無いディレクトリでは、`go build <file>`と同様に単一ファイルだけの`command-line-arguments`パッケージとして扱われ、同じディレクトリの他ファイルは読み込まれない(標準のGoの挙動であり、amivm側で変えられるものではない)。`test_ir/`のテスト(`make test`)は標準ライブラリ呼び出ししか使わないため、この制約の影響を受けず`go.mod`無しの一時ディレクトリでも問題なく動作する。
+
+### importパスの自動推測は信頼できない — `-i`/`--import`オプションによる対処
+
+`typeCheck`が解決するのは、あくまで「**import文が既に存在する**参照」である。`imports.Process`(goimports)が`?xxrt.Helper`のような裸の識別子から`import "xxlangmodule/xxrt"`のようなimport文を自動的に**推測して挿入する**部分は、`typeCheck`の変更の対象外であり、かつ挙動が不安定であることが分かっている。標準ライブラリや、既にどこかから参照されて「馴染みのある」パッケージは高い確率で解決できるが、まだどこからも参照されていない新規のパッケージ(独自ライブラリを導入した直後など)に対しては、importの挿入自体に失敗する(識別子が未解決のまま残る)場合や、誤ったimportパスを挿入してしまう場合がある。これは`golang.org/x/tools/imports`の軽量なAPI(`imports.Process`)自体の制約であり、`typeCheck`側をいくら正確にしても解消しない別問題である。
+
+この不確実性を、goimportsの推測を経由させないことで回避するのが`-i`/`--import <名前>=<importパス>`オプション(8節)。`main.go`の`injectExplicitImports`が、指定されたマッピングを`file.Decls`の先頭に明示的な`*ast.GenDecl{Tok: token.IMPORT}`として(エイリアス付きで)追加してから`generateOutput`(→`compileOnce`→`imports.Process`)に渡す。goimportsは「既にある正しいimportを保つ・実際に使われていなければ消す」という通常の未使用import除去の仕組みで処理するだけなので、推測が一切不要になる。
 
 `generateOutput`は`verbose bool`引数を取り、`true`のときだけ「未使用変数を検出したため`_ = x`を挿入します」というログと「最終生成コード」のダンプを標準出力に書く。`false`のときはこれらを一切出力しない(8節参照)。
 
@@ -448,17 +482,20 @@ ast.File
 
 ## 8. エントリポイント(`main`)とCLI引数の解釈
 
-`main`は次の3つの責務に分かれる。
+`main`は次の4つの責務に分かれる。
 
 1. `parseArgs(os.Args[1:])`でコマンドライン引数を解釈する
-2. IRファイルを読み込み、`buildProgram`→`generateOutput`のパイプラインに通す
-3. `verbose`に応じて標準出力の有無を切り替える。エラーは`verbose`の値に関わらず常に出力する
+2. IRファイルを読み込み、`buildProgram`でastを組み立てる
+3. `-i`/`--import`が指定されていれば`injectExplicitImports`で明示的なimportを追加してから`generateOutput`のパイプラインに通す
+4. `verbose`に応じて標準出力の有無を切り替える。エラーは`verbose`の値に関わらず常に出力する
 
 ```
-amivm <IRファイルパス> [-o <出力ファイルパス>] [-v]
+amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]...
 ```
 
-`parseArgs`は`os.Args`を1つずつ見て`-o`(次のトークンを値として消費)・`-v`(フラグ)・それ以外(IRファイルパス、1個まで)に振り分ける、順序に依存しない小さな手書きパーサーである。標準ライブラリの`flag`パッケージは最初の非フラグ引数でパースを止めてしまう(`amivm input.ir -v`のように位置引数を先に書くと`-v`が拾えない)ため、`amivm <path> -o out.go -v`のような自然な書き方も許容するために独自実装にしている。
+`parseArgs`は`os.Args`を1つずつ見て`-o`/`--output`(次のトークンを値として消費)・`-v`/`--verbose`(フラグ)・`-i`/`--import`(次のトークンを`name=path`として消費、繰り返し可)・それ以外(IRファイルパス、1個まで)に振り分ける、順序に依存しない小さな手書きパーサーである。短縮形と長形式は`switch`の同じ`case`に列挙しているだけで、挙動は完全に同じ。標準ライブラリの`flag`パッケージは最初の非フラグ引数でパースを止めてしまう(`amivm input.ir -v`のように位置引数を先に書くと`-v`が拾えない)ため、`amivm <path> -o out.go -v`のような自然な書き方も許容するために独自実装にしている。
+
+`-i`/`--import`の各値は`parseImportArg`で`name`と`path`に分解される。`name`はGoの識別子として妥当な形式(`^[A-Za-z_][A-Za-z0-9_]*$`)であることを検証し、同じ`name`が複数回指定された場合はエラーにする(サイレントな上書きを避けるため)。`injectExplicitImports`はこの`map[string]string`を受け取り、決定的な出力にするためキーをソートしてから`*ast.ImportSpec`(常にエイリアス付き。パッケージの実際の宣言名が`name`と一致しない場合でも安全に動く)の並びを組み立て、`file.Decls`の先頭に追加する。7節で説明した通り、実際に使われていないエイリアスはこの後の`imports.Process`が自動的に取り除く。
 
 `-o`が省略された場合の出力先は`deriveOutputPath`が決める。`filepath.Ext`でIRファイルパスの拡張子を判定し、`.go`に置き換える(拡張子が無ければ`.go`を付け足す)だけの単純な関数。
 
@@ -484,7 +521,7 @@ func deriveOutputPath(irPath string) string {
 - **意味の正しさの検証は一切自前で持たず、`go/types`に委ねる**
 - **ブロック構造(`FUNC`/`SEL`/`CLOS`/`STTYPE`)は専用の走査関数で対応**し、フラットな行処理では表現できない部分だけを局所化している
 - **未使用変数の救済は、命名規則による所属関数の特定(文字列分割)と、ネストしたブロックへの再帰探索を組み合わせる**ことで、`CLOS`内の変数も含めて正しい挿入位置を特定する
-- **amivmコマンドの責務はGoソースファイルの出力までとし、`go build`による実行ファイル生成は行わない**。CLI引数(`-o`/`-v`)の解釈(`parseArgs`)と出力パイプライン(`generateOutput`)を分離し、`verbose`フラグ1つで標準出力の有無を一括制御する
+- **amivmコマンドの責務はGoソースファイルの出力までとし、`go build`による実行ファイル生成は行わない**。CLI引数(`-o`/`-v`/`-i`、いずれも長形式あり)の解釈(`parseArgs`)と出力パイプライン(`generateOutput`)を分離し、`verbose`フラグ1つで標準出力の有無を一括制御する
 
 ## 既知の簡略化・注意点
 

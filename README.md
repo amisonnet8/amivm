@@ -49,13 +49,14 @@ Re-running `make install` after changes immediately updates the `amivm` the othe
 ## Usage
 
 ```
-amivm <ir-file> [-o <output-file>] [-v]
+amivm <ir-file> [-o|--output <output-file>] [-v|--verbose] [-i|--import <name>=<import-path>]...
 ```
 
 | Option | Description |
 |---|---|
-| `-o <output-file>` | Where to write the generated Go file. If omitted, the output path is derived from `<ir-file>` by replacing its extension with `.go` (or appending `.go` if it has none). |
-| `-v` | Print progress (the source IR, self-healing steps, the final generated code, a success message). Without it, the command is silent on success — only errors are ever printed, with or without `-v`. |
+| `-o <output-file>`, `--output <output-file>` | Where to write the generated Go file. If omitted, the output path is derived from `<ir-file>` by replacing its extension with `.go` (or appending `.go` if it has none). |
+| `-v`, `--verbose` | Print progress (the source IR, self-healing steps, the final generated code, a success message). Without it, the command is silent on success — only errors are ever printed, with or without `-v`. |
+| `-i <name>=<import-path>`, `--import <name>=<import-path>` | Repeatable. Adds an explicit, aliased `import <name> "<import-path>"` to the generated file up front, so a `?<name>.Func` call resolves to it directly instead of relying on goimports to guess the import path from the bare identifier — a guess that's only reliable for the standard library and packages already referenced elsewhere. Useful for calling into a custom Go library a downstream project (e.g. a language front end targeting AMIVM-IR) provides. Names that end up unused in the generated code are dropped automatically, so the same set of `-i`/`--import` flags can safely be reused across every IR file. |
 
 ## Example
 
@@ -120,6 +121,38 @@ Instructions are grouped roughly into:
 Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value.
 
 The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), see [`docs/amivm_code_design.md`](docs/amivm_code_design.md).
+
+## Calling your own Go code
+
+A downstream project built on AMIVM-IR (e.g. a language front end) will often want its generated programs to call into a runtime library it wrote itself, not just the Go standard library. This works through the same `?pkg.Func` / `CALL` mechanism already used for `fmt.Println` and friends — nothing IR-side is special-cased for "custom" code — but two things are worth knowing up front:
+
+1. **Package your functions as an ordinary Go package**, in whatever module layout fits your project. It does not need to be published anywhere — a private module (fetched over a private VCS host with `GOPRIVATE`, or referenced with a `replace` directive for a local/monorepo setup) works exactly the same as a public one from amivm's point of view.
+2. **The directory amivm writes its output into must be a Go module** (i.e. it or an ancestor has a `go.mod`). Type-checking a call into another package — whether a hand-written file sitting next to the generated one, or a separate package elsewhere in the same module — relies on `golang.org/x/tools/go/packages`, which (like `go build` itself) only looks beyond a single bare file when there's a module to resolve against.
+3. **Pass `-i name=import-path` for any package amivm hasn't seen referenced before.** Auto-adding the right import for a bare identifier like `xxrt.Helper` is goimports' job, and it's only reliable for the standard library and packages already used somewhere — for a freshly-introduced package it can fail to add the import, or even guess the wrong path. Being explicit sidesteps the guess entirely.
+
+For example, given a small runtime package:
+
+```go
+// xxrt/xxrt.go — package xxrt, part of (or a dependency of) the consuming module
+package xxrt
+
+func Helper(a, b int) int { return a*10 + b }
+```
+
+and this IR:
+
+```
+FUNC	!main	:
+	VAR	%r	^int
+	CALL	%r	:	?xxrt.Helper	1	2
+	CALL	:	?fmt.Println	%r
+	RET
+ENDFUNC
+```
+
+running `amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt` (from inside `yourmodule`, or with `-o` pointing into it) generates a `hello.go` with `import xxrt "yourmodule/xxrt"` already in place, ready for `go build`.
+
+**Calling methods** (e.g. `file.Close()`, or a method on your own type) works the same way regardless of whether the receiver type is a stdlib type or your own: declare the method's function type with `FNTYPE`, pull the bound method value out of a struct value with `FGET`, and call that value — see [`test_ir/16_method_call.ir`](test_ir/16_method_call.ir) for a worked example against `(*os.File).Close`.
 
 ## Constraints
 

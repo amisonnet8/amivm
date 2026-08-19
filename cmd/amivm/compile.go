@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/importer"
 	"go/parser"
 	"go/token"
-	"go/types"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 )
 
@@ -180,26 +180,53 @@ func compileOnce(file *ast.File, outputPath string) ([]byte, *ast.File, []string
 		return nil, nil, nil, fmt.Errorf("生成コードの構文エラー: %w", err)
 	}
 
-	var unusedVars []string
-	var otherErrs []string
-	conf := types.Config{
-		Importer: importer.Default(),
-		Error: func(err error) {
-			if typeErr, ok := err.(types.Error); ok {
-				if name, isUnused := extractUnusedVarName(typeErr.Msg); isUnused {
-					unusedVars = append(unusedVars, name)
-					return
-				}
-			}
-			otherErrs = append(otherErrs, err.Error())
-		},
+	unusedVars, otherErrs, err := typeCheck(outputPath, resolved)
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	conf.Check("generated", fset2, []*ast.File{parsedFile}, nil)
-
 	if len(otherErrs) > 0 {
 		return resolved, parsedFile, unusedVars, fmt.Errorf("型チェック失敗:\n%s", strings.Join(otherErrs, "\n"))
 	}
 	return resolved, parsedFile, unusedVars, nil
+}
+
+// typeCheck は、生成したGoコード(resolved)をoutputPathの位置にあるものとして型チェックする。
+// go/packages(内部でgo list/go buildを使う)経由にすることで、標準ライブラリだけでなく、
+// outputPathが属するモジュールが依存する任意のGoパッケージ(利用側言語実装が用意した
+// 独自のランタイムライブラリ等)への参照も正しく解決できる。Overlayでoutputpath上の内容を
+// resolvedに差し替えるため、ディスクへの書き込みは発生しない。同じディレクトリ内の他の
+// .goファイル(手書きのランタイムコード等)もgo/packagesが自動的に同一パッケージとして
+// 読み込むため、そちらへの参照も解決できる。
+func typeCheck(outputPath string, resolved []byte) (unusedVars []string, otherErrs []string, err error) {
+	// Overlayのキーはgo/packagesの仕様上、絶対パスでなければならない
+	// (相対パスのままだと出力先ファイルが存在しない扱いになり解決に失敗する)。
+	absOutputPath, err := filepath.Abs(outputPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("出力パスの解決に失敗: %w", err)
+	}
+
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedTypes | packages.NeedTypesInfo |
+			packages.NeedImports | packages.NeedDeps | packages.NeedSyntax,
+		Dir:     filepath.Dir(absOutputPath),
+		Overlay: map[string][]byte{absOutputPath: resolved},
+	}
+	pkgs, err := packages.Load(cfg, "file="+absOutputPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("パッケージ読み込み失敗: %w", err)
+	}
+	if len(pkgs) != 1 {
+		return nil, nil, fmt.Errorf("パッケージ読み込み失敗: 出力先のパッケージを特定できません(%s)", outputPath)
+	}
+
+	for _, e := range pkgs[0].Errors {
+		if name, isUnused := extractUnusedVarName(e.Msg); isUnused {
+			unusedVars = append(unusedVars, name)
+			continue
+		}
+		otherErrs = append(otherErrs, e.Error())
+	}
+	return unusedVars, otherErrs, nil
 }
 
 // generateOutput は、組み立てたast.Fileを実際のGoソースに変換し、outputPathへ書き出す。
