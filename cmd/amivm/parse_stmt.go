@@ -1,0 +1,703 @@
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"strings"
+)
+
+// =====================================================================
+// 各命令のパース
+// =====================================================================
+
+func joinRaw(atoms []Atom) string {
+	raws := make([]string, len(atoms))
+	for i, a := range atoms {
+		raws[i] = a.Raw
+	}
+	return strings.Join(raws, " ")
+}
+
+func expectArgs(kw string, atoms []Atom, n int) error {
+	if len(atoms) != n {
+		return fmt.Errorf("%s構文が不正です(引数の数が合いません): %s %s", kw, kw, joinRaw(atoms))
+	}
+	return nil
+}
+
+// splitColon は、CALL/FUNC/FNTYPE/CLOSで使う「:」1個による2分割を行う。
+// コロンは戻り値・代入先と、呼び出し対象・パラメータ列を区切るために必ず1個必要。
+func splitColon(atoms []Atom) (left, right []Atom, err error) {
+	idx := -1
+	for i, a := range atoms {
+		if a.Kind == KColon {
+			if idx >= 0 {
+				return nil, nil, fmt.Errorf("コロン(:)は1つだけ指定してください: %s", joinRaw(atoms))
+			}
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return nil, nil, fmt.Errorf("コロン(:)が見つかりません: %s", joinRaw(atoms))
+	}
+	return atoms[:idx], atoms[idx+1:], nil
+}
+
+// parseSingleLine は、ブロック開始行(FUNC/SEL/CLOS/STTYPE)・終了行・
+// LABELを除いた、単一行で完結する命令をパースする。GVARはここでは扱わない
+// (トップレベル専用のため、buildProgramでのみ処理される)。
+func parseSingleLine(line, funcName string) (ast.Stmt, error) {
+	atoms := tokenizeAndClassify(line)
+	if len(atoms) == 0 {
+		return nil, nil
+	}
+	kw := atoms[0].Raw
+	rest := atoms[1:]
+
+	switch kw {
+	case "VAR":
+		return parseVar(rest, funcName)
+	case "SET":
+		return parseSet(rest, funcName)
+	case "ASET":
+		return parseAset(rest, funcName)
+	case "AGET":
+		return parseAget(rest, funcName)
+	case "PSET":
+		return parsePset(rest, funcName)
+	case "PGET":
+		return parsePget(rest, funcName)
+	case "ADDR":
+		return parseAddr(rest, funcName)
+	case "ADD", "SUB", "MUL", "DIV", "MOD", "BAND", "BOR", "BXOR", "BCLEAR", "SHL", "SHR", "AND", "OR",
+		"EQ", "NEQ", "LT", "LTE", "GT", "GTE":
+		return parseBin2(kw, rest, funcName)
+	case "BNOT", "NOT":
+		return parseUnary(kw, rest, funcName)
+	case "LABEL":
+		return parseLabel(rest)
+	case "GOTO":
+		return parseGoto(rest)
+	case "IF":
+		return parseIf(rest, funcName)
+	case "RET":
+		return parseRet(rest, funcName)
+	case "CALL":
+		return parseCall(rest, funcName)
+	case "DEFER":
+		return parseDeferOrSpawn("DEFER", rest, funcName)
+	case "SPAWN":
+		return parseDeferOrSpawn("SPAWN", rest, funcName)
+	case "CHMAKE":
+		return parseChOrSlMake("CHMAKE", rest, funcName)
+	case "SLMAKE":
+		return parseChOrSlMake("SLMAKE", rest, funcName)
+	case "MPMAKE":
+		return parseMpMake(rest, funcName)
+	case "CHSEND":
+		return parseChSend(rest, funcName)
+	case "CHRECV":
+		return parseChRecv(rest, funcName)
+	case "CONCAT":
+		return parseConcat(rest, funcName)
+	case "SLICE":
+		return parseSlice(rest, funcName)
+	case "FSET":
+		return parseFset(rest, funcName)
+	case "FGET":
+		return parseFget(rest, funcName)
+	case "MSET":
+		return parseMset(rest, funcName)
+	case "MGET":
+		return parseMget(rest, funcName)
+	default:
+		return nil, fmt.Errorf("未知の命令です: %s", line)
+	}
+}
+
+func parseVar(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("VAR", atoms, 2); err != nil {
+		return nil, err
+	}
+	if funcName == "" {
+		return nil, fmt.Errorf("VARは関数内でのみ使えます(トップレベルはGVARを使ってください)")
+	}
+	if err := checkKind(atoms[0], CatVa); err != nil {
+		return nil, fmt.Errorf("VARの変数名が不正です: %w", err)
+	}
+	typExpr, err := atomExpr(atoms[1], "", CatType)
+	if err != nil {
+		return nil, fmt.Errorf("VARの型が不正です: %w", err)
+	}
+	goName := amivmLocalGoName(funcName, atoms[0].A)
+	return &ast.DeclStmt{
+		Decl: &ast.GenDecl{
+			Tok: token.VAR,
+			Specs: []ast.Spec{
+				&ast.ValueSpec{Names: []*ast.Ident{ast.NewIdent(goName)}, Type: typExpr},
+			},
+		},
+	}, nil
+}
+
+func parseGvar(atoms []Atom) (ast.Decl, error) {
+	if err := expectArgs("GVAR", atoms, 2); err != nil {
+		return nil, err
+	}
+	if err := checkKind(atoms[0], CatGv); err != nil {
+		return nil, fmt.Errorf("GVARの変数名が不正です: %w", err)
+	}
+	typExpr, err := atomExpr(atoms[1], "", CatType)
+	if err != nil {
+		return nil, fmt.Errorf("GVARの型が不正です: %w", err)
+	}
+	return &ast.GenDecl{
+		Tok: token.VAR,
+		Specs: []ast.Spec{
+			&ast.ValueSpec{Names: []*ast.Ident{ast.NewIdent(atoms[0].A)}, Type: typExpr},
+		},
+	}, nil
+}
+
+func parseSet(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("SET", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("SETの左辺が不正です: %w", err)
+	}
+	rhs, err := atomExpr(atoms[1], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("SETの右辺が不正です: %w", err)
+	}
+	return &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{rhs}}, nil
+}
+
+func parseAset(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("ASET", atoms, 3); err != nil {
+		return nil, err
+	}
+	arr, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("ASETの配列が不正です: %w", err)
+	}
+	idx, err := atomExpr(atoms[1], funcName, CatWhole)
+	if err != nil {
+		return nil, fmt.Errorf("ASETの添字が不正です: %w", err)
+	}
+	val, err := atomExpr(atoms[2], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("ASETの値が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.IndexExpr{X: arr, Index: idx}}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{val},
+	}, nil
+}
+
+func parseAget(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("AGET", atoms, 3); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("AGETの代入先が不正です: %w", err)
+	}
+	variable, err := atomExpr(atoms[1], funcName, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("AGETの配列が不正です: %w", err)
+	}
+	idx, err := atomExpr(atoms[2], funcName, CatWhole)
+	if err != nil {
+		return nil, fmt.Errorf("AGETの添字が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.IndexExpr{X: variable, Index: idx}},
+	}, nil
+}
+
+func parsePset(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("PSET", atoms, 2); err != nil {
+		return nil, err
+	}
+	ptr, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("PSETのポインタが不正です: %w", err)
+	}
+	val, err := atomExpr(atoms[1], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("PSETの値が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.StarExpr{X: ptr}}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{val},
+	}, nil
+}
+
+func parsePget(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("PGET", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("PGETの代入先が不正です: %w", err)
+	}
+	variable, err := atomExpr(atoms[1], funcName, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("PGETのポインタが不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.StarExpr{X: variable}},
+	}, nil
+}
+
+func parseAddr(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("ADDR", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("ADDRの代入先が不正です: %w", err)
+	}
+	variable, err := atomExpr(atoms[1], funcName, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("ADDRの対象が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: variable}},
+	}, nil
+}
+
+var binOpTokens = map[string]token.Token{
+	"ADD": token.ADD, "SUB": token.SUB, "MUL": token.MUL, "DIV": token.QUO,
+	"MOD": token.REM, "BAND": token.AND, "BOR": token.OR, "BXOR": token.XOR,
+	"BCLEAR": token.AND_NOT, "SHL": token.SHL, "SHR": token.SHR,
+	"AND": token.LAND, "OR": token.LOR,
+	"EQ": token.EQL, "NEQ": token.NEQ, "LT": token.LSS, "LTE": token.LEQ,
+	"GT": token.GTR, "GTE": token.GEQ,
+}
+
+var binOperandCategories = map[string][2]Category{
+	"ADD": {CatNumber, CatNumber}, "SUB": {CatNumber, CatNumber},
+	"MUL": {CatNumber, CatNumber}, "DIV": {CatNumber, CatNumber},
+	"MOD": {CatInt, CatInt}, "BAND": {CatInt, CatInt}, "BOR": {CatInt, CatInt},
+	"BXOR": {CatInt, CatInt}, "BCLEAR": {CatInt, CatInt},
+	"SHL": {CatInt, CatWhole}, "SHR": {CatInt, CatWhole},
+	"AND": {CatBool, CatBool}, "OR": {CatBool, CatBool},
+	"EQ": {CatValue, CatValue}, "NEQ": {CatValue, CatValue},
+	"LT": {CatOrder, CatOrder}, "LTE": {CatOrder, CatOrder},
+	"GT": {CatOrder, CatOrder}, "GTE": {CatOrder, CatOrder},
+}
+
+func parseBin2(kw string, atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs(kw, atoms, 3); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("%sの左辺が不正です: %w", kw, err)
+	}
+	cats := binOperandCategories[kw]
+	a, err := atomExpr(atoms[1], funcName, cats[0])
+	if err != nil {
+		return nil, fmt.Errorf("%sの第1オペランドが不正です: %w", kw, err)
+	}
+	b, err := atomExpr(atoms[2], funcName, cats[1])
+	if err != nil {
+		return nil, fmt.Errorf("%sの第2オペランドが不正です: %w", kw, err)
+	}
+	op := binOpTokens[kw]
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.BinaryExpr{X: a, Op: op, Y: b}},
+	}, nil
+}
+
+func parseUnary(kw string, atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs(kw, atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("%sの左辺が不正です: %w", kw, err)
+	}
+	cat := CatBool
+	op := token.NOT
+	if kw == "BNOT" {
+		cat = CatInt
+		op = token.XOR
+	}
+	a, err := atomExpr(atoms[1], funcName, cat)
+	if err != nil {
+		return nil, fmt.Errorf("%sのオペランドが不正です: %w", kw, err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.UnaryExpr{Op: op, X: a}},
+	}, nil
+}
+
+// parseLabel は「LABEL label → label: ;」を解釈する。ラベルは常に空文とセットで
+// 1行完結するため(IR.txt参照)、直後の行の先読み・合体は不要。
+func parseLabel(atoms []Atom) (ast.Stmt, error) {
+	if err := expectArgs("LABEL", atoms, 1); err != nil {
+		return nil, err
+	}
+	if err := checkKind(atoms[0], CatLabel); err != nil {
+		return nil, fmt.Errorf("LABEL名が不正です: %w", err)
+	}
+	name, err := labelGoName(atoms[0])
+	if err != nil {
+		return nil, err
+	}
+	return &ast.LabeledStmt{Label: ast.NewIdent(name), Stmt: &ast.EmptyStmt{}}, nil
+}
+
+func parseGoto(atoms []Atom) (ast.Stmt, error) {
+	if err := expectArgs("GOTO", atoms, 1); err != nil {
+		return nil, err
+	}
+	if err := checkKind(atoms[0], CatLabel); err != nil {
+		return nil, fmt.Errorf("GOTOのラベルが不正です: %w", err)
+	}
+	name, err := labelGoName(atoms[0])
+	if err != nil {
+		return nil, err
+	}
+	return gotoStmt(name), nil
+}
+
+func gotoStmt(label string) ast.Stmt {
+	return &ast.BranchStmt{Tok: token.GOTO, Label: ast.NewIdent(label)}
+}
+
+func parseIf(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("IF", atoms, 2); err != nil {
+		return nil, err
+	}
+	cond, err := atomExpr(atoms[0], funcName, CatBool)
+	if err != nil {
+		return nil, fmt.Errorf("IFの条件が不正です: %w", err)
+	}
+	if err := checkKind(atoms[1], CatLabel); err != nil {
+		return nil, fmt.Errorf("IFのラベルが不正です: %w", err)
+	}
+	name, err := labelGoName(atoms[1])
+	if err != nil {
+		return nil, err
+	}
+	return &ast.IfStmt{
+		Cond: cond,
+		Body: &ast.BlockStmt{List: []ast.Stmt{gotoStmt(name)}},
+	}, nil
+}
+
+func parseRet(atoms []Atom, funcName string) (ast.Stmt, error) {
+	var results []ast.Expr
+	for _, a := range atoms {
+		v, err := atomExpr(a, funcName, CatValue)
+		if err != nil {
+			return nil, fmt.Errorf("RETの戻り値が不正です: %w", err)
+		}
+		results = append(results, v)
+	}
+	return &ast.ReturnStmt{Results: results}, nil
+}
+
+func buildCallExpr(callAtom Atom, argAtoms []Atom, funcName string) (*ast.CallExpr, error) {
+	fn, err := atomExpr(callAtom, funcName, CatCallname)
+	if err != nil {
+		return nil, fmt.Errorf("呼び出し対象が不正です: %w", err)
+	}
+	var args []ast.Expr
+	for _, a := range argAtoms {
+		v, err := atomExpr(a, funcName, CatValue)
+		if err != nil {
+			return nil, fmt.Errorf("引数が不正です: %w", err)
+		}
+		args = append(args, v)
+	}
+	return &ast.CallExpr{Fun: fn, Args: args}, nil
+}
+
+// parseCall は「CALL multi1 multi2 ... : callname value1 value2 ...」を解釈する。
+// コロンの左側(多重代入先)は空でもよい(その場合は式文として呼び出すだけになる)。
+func parseCall(atoms []Atom, funcName string) (ast.Stmt, error) {
+	destAtoms, rest, err := splitColon(atoms)
+	if err != nil {
+		return nil, fmt.Errorf("CALL構文が不正です: %w", err)
+	}
+	if len(rest) == 0 {
+		return nil, fmt.Errorf("CALL構文が不正です(呼び出し対象がありません): %s", joinRaw(atoms))
+	}
+	callAtom, argAtoms := rest[0], rest[1:]
+
+	callExpr, err := buildCallExpr(callAtom, argAtoms, funcName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(destAtoms) == 0 {
+		return &ast.ExprStmt{X: callExpr}, nil
+	}
+
+	var lhs []ast.Expr
+	for _, d := range destAtoms {
+		e, err := atomExpr(d, funcName, CatMulti)
+		if err != nil {
+			return nil, fmt.Errorf("CALLの代入先が不正です: %w", err)
+		}
+		lhs = append(lhs, e)
+	}
+	return &ast.AssignStmt{Lhs: lhs, Tok: token.ASSIGN, Rhs: []ast.Expr{callExpr}}, nil
+}
+
+// parseDeferOrSpawn は「DEFER/SPAWN callname value1 value2 ...」を解釈する(コロンなし)。
+func parseDeferOrSpawn(kw string, atoms []Atom, funcName string) (ast.Stmt, error) {
+	if len(atoms) == 0 {
+		return nil, fmt.Errorf("%s構文が不正です(呼び出し対象がありません): %s", kw, kw)
+	}
+	callExpr, err := buildCallExpr(atoms[0], atoms[1:], funcName)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", kw, err)
+	}
+	if kw == "DEFER" {
+		return &ast.DeferStmt{Call: callExpr}, nil
+	}
+	return &ast.GoStmt{Call: callExpr}, nil
+}
+
+func parseChOrSlMake(kw string, atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs(kw, atoms, 3); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("%sの変数が不正です: %w", kw, err)
+	}
+	typExpr, err := atomExpr(atoms[1], "", CatDeftype)
+	if err != nil {
+		return nil, fmt.Errorf("%sの型が不正です: %w", kw, err)
+	}
+	size, err := atomExpr(atoms[2], funcName, CatWhole)
+	if err != nil {
+		return nil, fmt.Errorf("%sのサイズが不正です: %w", kw, err)
+	}
+	makeCall := &ast.CallExpr{Fun: ast.NewIdent("make"), Args: []ast.Expr{typExpr, size}}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{makeCall},
+	}, nil
+}
+
+func parseMpMake(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("MPMAKE", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("MPMAKEの変数が不正です: %w", err)
+	}
+	typExpr, err := atomExpr(atoms[1], "", CatDeftype)
+	if err != nil {
+		return nil, fmt.Errorf("MPMAKEの型が不正です: %w", err)
+	}
+	makeCall := &ast.CallExpr{Fun: ast.NewIdent("make"), Args: []ast.Expr{typExpr}}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{makeCall},
+	}, nil
+}
+
+func parseChSend(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("CHSEND", atoms, 2); err != nil {
+		return nil, err
+	}
+	ch, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("CHSENDのチャネルが不正です: %w", err)
+	}
+	v, err := atomExpr(atoms[1], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("CHSENDの送信値が不正です: %w", err)
+	}
+	return &ast.SendStmt{Chan: ch, Value: v}, nil
+}
+
+func parseChRecv(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if len(atoms) < 2 || len(atoms) > 3 {
+		return nil, fmt.Errorf("CHRECV構文が不正です(書式: CHRECV l1 (l2) cs): %s", joinRaw(atoms))
+	}
+	destAtoms := atoms[:len(atoms)-1]
+	chAtom := atoms[len(atoms)-1]
+
+	var lhs []ast.Expr
+	for _, d := range destAtoms {
+		e, err := atomExpr(d, funcName, CatMulti)
+		if err != nil {
+			return nil, fmt.Errorf("CHRECVの代入先が不正です: %w", err)
+		}
+		lhs = append(lhs, e)
+	}
+	ch, err := atomExpr(chAtom, funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("CHRECVのチャネルが不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: lhs, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.UnaryExpr{Op: token.ARROW, X: ch}},
+	}, nil
+}
+
+func parseConcat(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if len(atoms) < 3 {
+		return nil, fmt.Errorf("CONCAT構文が不正です(書式: CONCAT l1 s1 s2 ...): %s", joinRaw(atoms))
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("CONCATの左辺が不正です: %w", err)
+	}
+	var parts []ast.Expr
+	for _, a := range atoms[1:] {
+		v, err := atomExpr(a, funcName, CatSlice)
+		if err != nil {
+			return nil, fmt.Errorf("CONCATのオペランドが不正です: %w", err)
+		}
+		parts = append(parts, v)
+	}
+	expr := parts[0]
+	for _, p := range parts[1:] {
+		expr = &ast.BinaryExpr{X: expr, Op: token.ADD, Y: p}
+	}
+	return &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{expr}}, nil
+}
+
+func parseSlice(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("SLICE", atoms, 4); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("SLICEの代入先が不正です: %w", err)
+	}
+	src, err := atomExpr(atoms[1], funcName, CatSlice)
+	if err != nil {
+		return nil, fmt.Errorf("SLICEの対象が不正です: %w", err)
+	}
+	var low, high ast.Expr
+	if _, err := atomExpr(atoms[2], funcName, CatFromTo); err != nil {
+		return nil, fmt.Errorf("SLICEのfromが不正です: %w", err)
+	}
+	if atoms[2].Kind != KBlank {
+		low, _ = atomToExpr(atoms[2], funcName)
+	}
+	if _, err := atomExpr(atoms[3], funcName, CatFromTo); err != nil {
+		return nil, fmt.Errorf("SLICEのtoが不正です: %w", err)
+	}
+	if atoms[3].Kind != KBlank {
+		high, _ = atomToExpr(atoms[3], funcName)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.SliceExpr{X: src, Low: low, High: high}},
+	}, nil
+}
+
+func parseFset(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("FSET", atoms, 3); err != nil {
+		return nil, err
+	}
+	obj, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("FSETの対象が不正です: %w", err)
+	}
+	if atoms[1].Kind != KField {
+		return nil, fmt.Errorf("FSETのフィールド名が不正です: %s", atoms[1].Raw)
+	}
+	val, err := atomExpr(atoms[2], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("FSETの値が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.SelectorExpr{X: obj, Sel: ast.NewIdent(atoms[1].A)}}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{val},
+	}, nil
+}
+
+func parseFget(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("FGET", atoms, 3); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("FGETの代入先が不正です: %w", err)
+	}
+	variable, err := atomExpr(atoms[1], funcName, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("FGETの対象が不正です: %w", err)
+	}
+	if atoms[2].Kind != KField {
+		return nil, fmt.Errorf("FGETのフィールド名が不正です: %s", atoms[2].Raw)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.SelectorExpr{X: variable, Sel: ast.NewIdent(atoms[2].A)}},
+	}, nil
+}
+
+func parseMset(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("MSET", atoms, 3); err != nil {
+		return nil, err
+	}
+	m, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("MSETのmapが不正です: %w", err)
+	}
+	key, err := atomExpr(atoms[1], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("MSETのキーが不正です: %w", err)
+	}
+	val, err := atomExpr(atoms[2], funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("MSETの値が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.IndexExpr{X: m, Index: key}}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{val},
+	}, nil
+}
+
+func parseMget(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if len(atoms) < 3 || len(atoms) > 4 {
+		return nil, fmt.Errorf("MGET構文が不正です(書式: MGET l1 (l2) m v1): %s", joinRaw(atoms))
+	}
+	valueAtom := atoms[len(atoms)-1]
+	mapAtom := atoms[len(atoms)-2]
+	destAtoms := atoms[:len(atoms)-2]
+
+	var lhs []ast.Expr
+	for _, d := range destAtoms {
+		e, err := atomExpr(d, funcName, CatMulti)
+		if err != nil {
+			return nil, fmt.Errorf("MGETの代入先が不正です: %w", err)
+		}
+		lhs = append(lhs, e)
+	}
+	m, err := atomExpr(mapAtom, funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("MGETのmapが不正です: %w", err)
+	}
+	key, err := atomExpr(valueAtom, funcName, CatValue)
+	if err != nil {
+		return nil, fmt.Errorf("MGETのキーが不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: lhs, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.IndexExpr{X: m, Index: key}},
+	}, nil
+}

@@ -1,6 +1,19 @@
 # AMIVM お試し実装 コード設計メモ
 
-`main.go`の内部構造を、処理の流れに沿って説明する。命令セットそのものの仕様は`amivm_instruction_spec.md`(および唯一の正確な仕様である`amivm_spec.md`)を参照。
+コンパイラ本体(`cmd/amivm/`配下の単一パッケージ`package main`)の内部構造を、処理の流れに沿って説明する。命令セットそのものの仕様は`amivm_instruction_spec.md`(および唯一の正確な仕様である`amivm_spec.md`)を参照。
+
+実装は処理の層ごとに、`cmd/amivm/`配下の以下のファイルへ分割されている。各節がどのファイルに対応するかを併記する。
+
+| ファイル | 対応する節 |
+|---|---|
+| `token.go` | 1節(トークナイズ+分類) |
+| `parse_stmt.go` | 2節(命令の判定・1行完結命令のパース)、4節(`splitColon`) |
+| `astbuild.go` | 3節の`atomToExpr`・命名規則ヘルパー |
+| `category.go` | 3節の`Category`/`allowedKinds`/`atomExpr`/`checkKind` |
+| `parse_block.go` | 5節(ブロック構造の組み立て、`TYPE`系宣言のパース) |
+| `program.go` | 5節の`buildProgram`(トップレベルの組み立て) |
+| `compile.go` | 6節(未使用変数の救済)、7節(Goソース出力パイプライン) |
+| `main.go` | 8節(エントリポイントとCLI引数の解釈) |
 
 ## 全体像
 

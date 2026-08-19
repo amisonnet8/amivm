@@ -6,7 +6,7 @@ AMIVMは、独自の中間表現(**AMIVM-IR**)をGoのソースコードに変�
 
 ## ステータス
 
-現状は**試作段階の実装**です。コンパイラ本体は`main.go`1ファイルにまとまっており、対象言語からAMIVM-IRへの変換を担う「フロントエンド」は意図的にこのリポジトリのスコープ外としています([パイプライン](#パイプライン)参照)。
+現状は**試作段階の実装**です。コンパイラ本体は単一のGoパッケージ(サブディレクトリなし)で、役割ごとにいくつかのファイルへ分割されています。対象言語からAMIVM-IRへの変換を担う「フロントエンド」は意図的にこのリポジトリのスコープ外としています([パイプライン](#パイプライン)参照)。
 
 ## パイプライン
 
@@ -29,7 +29,7 @@ AMIVM自身の責務はGoソースファイルを出力するところまでで�
 ## ビルド
 
 ```sh
-go build -o amivm main.go
+go build -o amivm ./cmd/amivm
 ```
 
 または同梱の`Makefile`を使う(`make help`で全ターゲット一覧を表示。`test`は`test_ir/`配下の全サンプルをコンパイラに通す)。
@@ -111,7 +111,7 @@ Hello, AMIVM!
 
 メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。
 
-**唯一の正確な仕様は[`amivm_spec.md`](amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`amivm_instruction_spec.md`](amivm_instruction_spec.md)、コンパイラ内部の実装(トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)の解説が[`amivm_code_design.md`](amivm_code_design.md)にあります。
+**唯一の正確な仕様は[`docs/amivm_spec.md`](docs/amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md)、コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)の解説が[`docs/amivm_code_design.md`](docs/amivm_code_design.md)にあります。
 
 ## 制約
 
@@ -122,11 +122,20 @@ Hello, AMIVM!
 ## リポジトリ構成
 
 ```
-main.go                     コンパイラ本体(トークナイズ→分類→パース→ast.File組み立て→Go出力)
+cmd/amivm/
+  token.go                   トークナイズ+分類(Kind体系)
+  astbuild.go                命名規則とAtom→ast.Exprの組み立て
+  category.go                オペランドカテゴリ(許容Kind集合)と検証
+  parse_stmt.go              1行完結命令(VAR/SET/CALL等)のパース
+  parse_block.go             ブロック構造(FUNC/SEL/CLOS/STTYPE、TYPE系宣言)のパース
+  program.go                 トップレベルの組み立て(buildProgram)
+  compile.go                 未使用変数の自己修復+Goソース出力パイプライン
+  main.go                    エントリポイント(CLI引数解釈・main)
+docs/
+  amivm_spec.md               唯一の正確な仕様(プロジェクト概要+IR仕様の全体)
+  amivm_instruction_spec.md   amivm_spec.mdの解説版(設計判断の理由まで含む)
+  amivm_code_design.md        コンパイラ内部の設計メモ
 Makefile                    ビルド・テスト・クリーンアップ用タスク(`make help`で一覧表示)
-amivm_spec.md               唯一の正確な仕様(プロジェクト概要+IR仕様の全体)
-amivm_instruction_spec.md   amivm_spec.mdの解説版(設計判断の理由まで含む)
-amivm_code_design.md        main.goの内部設計メモ
 test_ir/                    命令カテゴリ別のサンプルIR
 CLAUDE.md                   AIによる開発支援のためのプロジェクト規約
 LICENSE                     MIT

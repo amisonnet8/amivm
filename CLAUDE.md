@@ -8,7 +8,7 @@ AMIVM(仮称)は、独自の中間言語(AMIVM-IR)をGoコードに変換する�
 対象言語 → (フロントエンドはAIが別途設計) → AMIVM-IR → AMIVM → Goコード → (go build) → 実行ファイル
 ```
 
-Goの並行処理(goroutine/channel)を中間言語に直接取り込んでいるのが特徴。`amivm`コマンド(`main.go`をビルドしたもの)の責務は「AMIVM-IR → Goコード」までで、Goコードを実行ファイルにする`go build`は別工程として切り離されている(amivm自身は実行しない)。
+Goの並行処理(goroutine/channel)を中間言語に直接取り込んでいるのが特徴。`amivm`コマンド(単一パッケージ・複数ファイル構成の実装をビルドしたもの。後述の「ドキュメント構成」節参照)の責務は「AMIVM-IR → Goコード」までで、Goコードを実行ファイルにする`go build`は別工程として切り離されている(amivm自身は実行しない)。
 
 ### 制約
 
@@ -24,12 +24,14 @@ Goの並行処理(goroutine/channel)を中間言語に直接取り込んでい�
 
 | ファイル | 役割 |
 |---|---|
-| `amivm_spec.md` | **唯一の正確な仕様。** プロジェクト概要+IR命令セットの全体を体系立てて記載(旧`PJ.txt`+`IR.txt`の統合・後継。両ファイルは削除済み) |
-| `amivm_instruction_spec.md` | `amivm_spec.md`と同じ内容を、設計判断の理由・変更の経緯まで含めて解説したもの |
-| `amivm_code_design.md` | `main.go`の内部実装(トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理・CLI引数解釈など)の設計メモ |
+| `docs/amivm_spec.md` | **唯一の正確な仕様。** プロジェクト概要+IR命令セットの全体を体系立てて記載(旧`PJ.txt`+`IR.txt`の統合・後継。両ファイルは削除済み) |
+| `docs/amivm_instruction_spec.md` | `amivm_spec.md`と同じ内容を、設計判断の理由・変更の経緯まで含めて解説したもの |
+| `docs/amivm_code_design.md` | コンパイラ本体の内部実装(トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理・CLI引数解釈など)の設計メモ。ファイル構成は次節「実装のファイル構成」参照 |
 | `README.md` / `README_ja.md` | GitHub向けの導入ドキュメント(英語版/日本語版) |
 | `test_ir/` | 命令カテゴリ別のサンプルIR。新しい命令・構文を実装したら対応するファイルを追加・更新して`go build`まで通すこと |
 | `CLAUDE.md` | 本ファイル。AIによる開発支援のための規約・注意点 |
+
+以降の節で単に`amivm_spec.md`のようにファイル名だけで参照している箇所は、いずれも`docs/`配下を指す。
 
 ## 仕様の正(source of truth)
 
@@ -115,9 +117,28 @@ amivm <IRファイルパス> [-o <出力ファイルパス>] [-v]
 
 これが、`callname`カテゴリに`!xxx`/`!main`/`?xxx`/`?xxx.xxx`だけでなく`%xxx`(ローカル変数)も含まれている理由。`%xxx`は「変数に格納された関数値(メソッド値・クロージャーを含む)」を呼び出すケースに対応する。`test_ir/16_method_call.ir`に`(*os.File).Close`を例にした実例がある。
 
+## 実装のファイル構成
+
+コンパイラ本体は`cmd/amivm/`配下の単一パッケージ(`package main`)のまま、処理の層ごとに複数ファイルへ分割されている。分割の経緯・各層の詳細は`amivm_code_design.md`を参照。
+
+| ファイル | 役割 |
+|---|---|
+| `cmd/amivm/token.go` | トークナイズ+分類(`Kind`体系、`classify`系関数) |
+| `cmd/amivm/astbuild.go` | 命名規則、`Atom`→`ast.Expr`の組み立て(`atomToExpr`など) |
+| `cmd/amivm/category.go` | オペランドカテゴリ(`Category`、許容`Kind`集合)と検証(`atomExpr`/`checkKind`) |
+| `cmd/amivm/parse_stmt.go` | 1行完結命令のパース(`VAR`/`SET`/`CALL`等の`parseXxx`群) |
+| `cmd/amivm/parse_block.go` | ブロック構造(`FUNC`/`SEL`/`CLOS`/`STTYPE`)と`TYPE`系宣言のパース |
+| `cmd/amivm/program.go` | トップレベルの組み立て(`buildProgram`) |
+| `cmd/amivm/compile.go` | 未使用変数の自己修復処理 + Goソース出力パイプライン(`compileOnce`/`generateOutput`) |
+| `cmd/amivm/main.go` | エントリポイントのみ(CLI引数解釈・`main`) |
+
+`go build`/`go vet`/`goimports`などのコマンドは`cmd/amivm`パッケージを対象に実行すること(`Makefile`の`build`/`fmt`/`vet`ターゲット参照)。
+
+新しいファイルを追加する場合も、上記の層分けに沿った既存ファイルに追記するか、層の境界が明確な場合のみ新規ファイルを起こすこと(命令1つごとにファイルを分けるような過剰な分割はしない)。
+
 ## 現在の実装状況
 
-`main.go`は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`CLOS`・CLIの`-o`/`-v`など)。`test_ir/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
+上記の実装は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`CLOS`・CLIの`-o`/`-v`など)。`test_ir/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
 
 ## 開発の進め方
 

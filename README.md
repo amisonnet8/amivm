@@ -6,7 +6,7 @@ AMIVM is a compilation toolchain that translates a custom intermediate represent
 
 ## Status
 
-This is a **prototype / work-in-progress implementation**. The whole compiler currently lives in a single `main.go`, and the front end (translating some target language into AMIVM-IR) is intentionally out of scope for this repository — see [Pipeline](#pipeline) below.
+This is a **prototype / work-in-progress implementation**. The whole compiler is a single Go package (no subdirectories) split across a handful of files by responsibility, and the front end (translating some target language into AMIVM-IR) is intentionally out of scope for this repository — see [Pipeline](#pipeline) below.
 
 ## Pipeline
 
@@ -29,7 +29,7 @@ AMIVM's own responsibility stops at emitting a Go source file. Turning that file
 ## Build
 
 ```sh
-go build -o amivm main.go
+go build -o amivm ./cmd/amivm
 ```
 
 or, using the provided `Makefile` (`make help` lists all targets, including `test`, which runs every example under `test_ir/` through the compiler):
@@ -111,7 +111,7 @@ Instructions are grouped roughly into:
 
 Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value.
 
-The **only authoritative specification is [`amivm_spec.md`](amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`amivm_instruction_spec.md`](amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), see [`amivm_code_design.md`](amivm_code_design.md).
+The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), see [`docs/amivm_code_design.md`](docs/amivm_code_design.md).
 
 ## Constraints
 
@@ -122,11 +122,20 @@ The **only authoritative specification is [`amivm_spec.md`](amivm_spec.md)**. If
 ## Repository layout
 
 ```
-main.go                     the compiler (tokenize → classify → parse → build ast.File → emit Go)
+cmd/amivm/
+  token.go                   tokenizing + classifying tokens into Atoms (Kind system)
+  astbuild.go                naming rules and Atom → ast.Expr assembly
+  category.go                operand categories (allowed Kind sets) and validation
+  parse_stmt.go              parsing of single-line instructions (VAR, SET, CALL, ...)
+  parse_block.go             parsing of block constructs (FUNC/SEL/CLOS/STTYPE, TYPE decls)
+  program.go                 top-level assembly (buildProgram)
+  compile.go                 unused-variable self-healing + the Go source output pipeline
+  main.go                    entry point (CLI arg parsing, main)
+docs/
+  amivm_spec.md               the authoritative specification (project overview + full IR reference)
+  amivm_instruction_spec.md   annotated walkthrough of amivm_spec.md, with design rationale
+  amivm_code_design.md        how the compiler is put together internally
 Makefile                    build/test/clean tasks (`make help` for the full list)
-amivm_spec.md               the authoritative specification (project overview + full IR reference)
-amivm_instruction_spec.md   annotated walkthrough of amivm_spec.md, with design rationale
-amivm_code_design.md        how main.go is put together internally
 test_ir/                    example IR programs, one file per instruction group
 CLAUDE.md                   project conventions for AI-assisted development
 LICENSE                     MIT

@@ -1,6 +1,7 @@
 # AMIVM: AMIVM-IRをGoソースへ変換するコンパイラ
 
 BINARY := amivm
+PKG    := ./cmd/amivm
 GO     := go
 
 .PHONY: all build test fmt vet tidy clean help
@@ -8,7 +9,7 @@ GO     := go
 all: build ## デフォルトターゲット(ビルドのみ)
 
 build: ## amivmバイナリをビルドする
-	$(GO) build -o $(BINARY) main.go
+	$(GO) build -o $(BINARY) $(PKG)
 
 test: build ## test_ir/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
 	@set -e; \
@@ -20,11 +21,11 @@ test: build ## test_ir/配下の全IRファイルを変換できるか検証す�
 		./$(BINARY) "$$ir" -o "$$tmp/$$name.go" -v; \
 	done
 
-fmt: ## main.goをgoimportsで整形する
-	goimports -w main.go
+fmt: ## *.goをgoimportsで整形する
+	goimports -w $(PKG)
 
 vet: ## go vetで静的検査する
-	$(GO) vet main.go
+	$(GO) vet $(PKG)
 
 tidy: ## go.mod/go.sumを整理する
 	$(GO) mod tidy
