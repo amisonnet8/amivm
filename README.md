@@ -38,6 +38,14 @@ or, using the provided `Makefile` (`make help` lists all targets, including `tes
 make build
 ```
 
+To use `amivm` from another project under development (e.g. a language front end targeting AMIVM-IR), install it onto your `PATH` instead of copying the binary around:
+
+```sh
+make install   # go install ./cmd/amivm — lands in $GOBIN, or $GOPATH/bin if unset
+```
+
+Re-running `make install` after changes immediately updates the `amivm` the other project picks up, with no path coupling between the two repos. Where `amivm` ultimately gets deployed for end users (e.g. under `/usr/local/bin`) is a decision for that downstream project, not this one.
+
 ## Usage
 
 ```

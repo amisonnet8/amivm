@@ -4,12 +4,15 @@ BINARY := amivm
 PKG    := ./cmd/amivm
 GO     := go
 
-.PHONY: all build test fmt vet tidy clean help
+.PHONY: all build install test fmt vet tidy clean help
 
 all: build ## デフォルトターゲット(ビルドのみ)
 
 build: ## amivmバイナリをビルドする
 	$(GO) build -o $(BINARY) $(PKG)
+
+install: ## amivmバイナリをGOBIN($GOPATH/bin)へインストールする(xxlang等の外部プロジェクトから使う場合はこちら)
+	$(GO) install $(PKG)
 
 test: build ## test_ir/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
 	@set -e; \

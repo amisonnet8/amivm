@@ -38,6 +38,14 @@ go build -o amivm ./cmd/amivm
 make build
 ```
 
+開発中の別プロジェクト(例: AMIVM-IRを出力するフロントエンド言語実装)から`amivm`を使いたい場合は、バイナリをコピーして回るのではなく`PATH`の通った場所にインストールする。
+
+```sh
+make install   # go install ./cmd/amivm — $GOBIN(未設定なら$GOPATH/bin)に配置される
+```
+
+`make install`を実行し直すだけで、相手プロジェクト側は常に最新の`amivm`を使える(2リポジトリ間でパスを持ち合う必要がない)。`amivm`を最終的にエンドユーザー向けにどこへ配置するか(例: `/usr/local/bin`)は、そのダウンストリームのプロジェクト側が決めることであり、本リポジトリの関心事ではない。
+
 ## 使い方
 
 ```
