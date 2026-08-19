@@ -1,0 +1,31 @@
+// 比較演算(EQ/NEQ/LT/LTE/GT/GTE)のテスト
+FUNC	!main	:
+	VAR	%a	^int
+	VAR	%b	^int
+	VAR	%s1	^string
+	VAR	%s2	^string
+	VAR	%eq	^bool
+	VAR	%neq	^bool
+	VAR	%lt	^bool
+	VAR	%lte	^bool
+	VAR	%gt	^bool
+	VAR	%gte	^bool
+	VAR	%seq	^bool
+	VAR	%slt	^bool
+
+	SET	%a	5
+	SET	%b	10
+	EQ	%eq	%a	%b
+	NEQ	%neq	%a	%b
+	LT	%lt	%a	%b
+	LTE	%lte	%a	%b
+	GT	%gt	%a	%b
+	GTE	%gte	%a	%b
+
+	SET	%s1	"abc"
+	SET	%s2	"abd"
+	EQ	%seq	%s1	%s2
+	LT	%slt	%s1	%s2
+
+	RET
+ENDFUNC

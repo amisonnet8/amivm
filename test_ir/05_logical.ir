@@ -1,0 +1,16 @@
+// 論理演算(AND/OR/NOT)のテスト
+FUNC	!main	:
+	VAR	%t	^bool
+	VAR	%f	^bool
+	VAR	%r1	^bool
+	VAR	%r2	^bool
+	VAR	%r3	^bool
+
+	SET	%t	true
+	SET	%f	false
+	AND	%r1	%t	%f
+	OR	%r2	%t	%f
+	NOT	%r3	%t
+
+	RET
+ENDFUNC

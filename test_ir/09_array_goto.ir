@@ -1,0 +1,29 @@
+// 配列・GOTO系(ASET/AGET + ループ処理)のテスト
+FUNC	!main	:
+	VAR	%arr	^[5]int
+	VAR	%i	^int
+	VAR	%sum	^int
+	VAR	%cond	^bool
+	VAR	%v	^int
+
+	ASET	%arr	0	10
+	ASET	%arr	1	20
+	ASET	%arr	2	30
+	ASET	%arr	3	40
+	ASET	%arr	4	50
+
+	SET	%i	0
+	SET	%sum	0
+
+LABEL	#loop
+	GTE	%cond	%i	5
+	IF	%cond	#done
+
+	AGET	%v	%arr	%i
+	ADD	%sum	%sum	%v
+	ADD	%i	%i	1
+	GOTO	#loop
+
+LABEL	#done
+	RET
+ENDFUNC

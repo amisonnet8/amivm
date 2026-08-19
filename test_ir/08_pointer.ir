@@ -1,0 +1,13 @@
+// ポインタ(ADDR/PGET/PSET)のテスト
+FUNC	!main	:
+	VAR	%v	^int
+	VAR	%p	^*int
+	VAR	%copy	^int
+
+	SET	%v	100
+	ADDR	%p	%v
+	PGET	%copy	%p
+	PSET	%p	200
+
+	RET
+ENDFUNC

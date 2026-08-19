@@ -1,0 +1,26 @@
+// 構造体(STTYPE/FIELD/FSET/FGET)のテスト
+STTYPE	^Point
+FIELD	>X	^int
+FIELD	>Y	^int
+ENDSTTYPE
+
+STTYPE	^Line
+FIELD	>Start	^Point
+FIELD	>End	^Point
+ENDSTTYPE
+
+FUNC	!main	:
+	VAR	%p	^Point
+	VAR	%line	^Line
+	VAR	%x	^int
+	VAR	%start	^Point
+
+	FSET	%p	>X	1
+	FSET	%p	>Y	2
+	FGET	%x	%p	>X
+
+	FSET	%line	>Start	%p
+	FGET	%start	%line	>Start
+
+	RET
+ENDFUNC

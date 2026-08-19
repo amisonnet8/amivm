@@ -1,0 +1,19 @@
+// 文字列操作(CONCAT/SLICE)のテスト
+FUNC	!main	:
+	VAR	%s1	^string
+	VAR	%s2	^string
+	VAR	%s3	^string
+	VAR	%joined	^string
+	VAR	%full	^string
+	VAR	%sub	^string
+
+	SET	%s1	"Hello"
+	SET	%s2	", "
+	SET	%s3	"World"
+	CONCAT	%joined	%s1	%s2	%s3
+
+	SET	%full	"amivm-lang"
+	SLICE	%sub	%full	0	5
+
+	RET
+ENDFUNC

@@ -1,0 +1,23 @@
+// スライス(SLTYPE/SLMAKE/ASET/AGET/SLICE)のテスト
+SLTYPE	^IntSlice	^int
+
+FUNC	!main	:
+	VAR	%sl	^IntSlice
+	VAR	%sub	^IntSlice
+	VAR	%full	^IntSlice
+	VAR	%v	^int
+
+	SLMAKE	%sl	^IntSlice	5
+	ASET	%sl	0	1
+	ASET	%sl	1	2
+	ASET	%sl	2	3
+	ASET	%sl	3	4
+	ASET	%sl	4	5
+
+	AGET	%v	%sl	2
+
+	SLICE	%sub	%sl	1	4
+	SLICE	%full	%sl	_	_
+
+	RET
+ENDFUNC

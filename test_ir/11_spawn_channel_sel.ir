@@ -1,0 +1,52 @@
+// SPAWN・チャネル・SELのテスト
+CHTYPE	^IntChan	^int
+
+FUNC	!worker	^IntChan	:
+	CHSEND	$1	42
+ENDFUNC
+
+FUNC	!main	:
+	VAR	%ch	^IntChan
+	VAR	%ch2	^IntChan
+	VAR	%v	^int
+	VAR	%v2	^int
+	VAR	%result	^string
+	VAR	%result2	^string
+
+	CHMAKE	%ch	^IntChan	1
+	CHMAKE	%ch2	^IntChan	1
+
+	SPAWN	!worker	%ch
+
+	CHRECV	%v	%ch
+
+	SEL
+	CASESEND	%ch2	7	#sent
+	DEFAULT	#notsent
+	ENDSEL
+	GOTO	#afterSend
+
+LABEL	#sent
+	SET	%result	"sent"
+	GOTO	#afterSend
+
+LABEL	#notsent
+	SET	%result	"not sent"
+
+LABEL	#afterSend
+	SEL
+	CASERECV	%v2	%ch2	#gotval
+	DEFAULT	#nothing
+	ENDSEL
+	GOTO	#end
+
+LABEL	#gotval
+	SET	%result2	"received"
+	GOTO	#end
+
+LABEL	#nothing
+	SET	%result2	"empty"
+
+LABEL	#end
+	RET
+ENDFUNC

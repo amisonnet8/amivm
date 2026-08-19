@@ -1,0 +1,20 @@
+// ビット演算(BAND/BOR/BXOR/BCLEAR/BNOT)のテスト
+FUNC	!main	:
+	VAR	%a	^int
+	VAR	%b	^int
+	VAR	%r1	^int
+	VAR	%r2	^int
+	VAR	%r3	^int
+	VAR	%r4	^int
+	VAR	%r5	^int
+
+	SET	%a	12
+	SET	%b	10
+	BAND	%r1	%a	%b
+	BOR	%r2	%a	%b
+	BXOR	%r3	%a	%b
+	BCLEAR	%r4	%a	%b
+	BNOT	%r5	%a
+
+	RET
+ENDFUNC

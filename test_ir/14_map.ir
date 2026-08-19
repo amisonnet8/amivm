@@ -1,0 +1,17 @@
+// map(MPTYPE/MPMAKE/MSET/MGET)のテスト
+MPTYPE	^StrIntMap	^string	^int
+
+FUNC	!main	:
+	VAR	%m	^StrIntMap
+	VAR	%v	^int
+	VAR	%ok	^bool
+
+	MPMAKE	%m	^StrIntMap
+	MSET	%m	"one"	1
+	MSET	%m	"two"	2
+
+	MGET	%v	%m	"one"
+	MGET	%v	%ok	%m	"three"
+
+	RET
+ENDFUNC

@@ -1,0 +1,27 @@
+// 通常演算(ADD/SUB/MUL/DIV/MOD)のテスト
+FUNC	!main	:
+	VAR	%a	^int
+	VAR	%b	^int
+	VAR	%sum	^int
+	VAR	%diff	^int
+	VAR	%prod	^int
+	VAR	%quot	^int
+	VAR	%rem	^int
+	VAR	%fa	^float64
+	VAR	%fb	^float64
+	VAR	%fsum	^float64
+
+	SET	%a	10
+	SET	%b	3
+	ADD	%sum	%a	%b
+	SUB	%diff	%a	%b
+	MUL	%prod	%a	%b
+	DIV	%quot	%a	%b
+	MOD	%rem	%a	%b
+
+	SET	%fa	1.5
+	SET	%fb	2.5
+	ADD	%fsum	%fa	%fb
+
+	RET
+ENDFUNC

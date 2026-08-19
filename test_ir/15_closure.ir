@@ -1,0 +1,35 @@
+// クロージャー(CLOS/ENDCLOS)のテスト
+FNTYPE	^BinOp	^int	^int	:	^int
+FNTYPE	^Provider	:	^int
+
+FUNC	!main	:
+	VAR	%base	^int
+	VAR	%adder	^BinOp
+	VAR	%counter	^Provider
+	VAR	%count	^int
+	VAR	%result	^int
+	VAR	%c1	^int
+	VAR	%c2	^int
+
+	SET	%base	100
+	SET	%count	0
+
+	CLOS	%adder	^int	^int	:	^int
+		VAR	%sum	^int
+		ADD	%sum	&1	&2
+		ADD	%sum	%sum	%base
+		RET	%sum
+	ENDCLOS
+
+	CALL	%result	:	%adder	1	2
+
+	CLOS	%counter	:	^int
+		ADD	%count	%count	1
+		RET	%count
+	ENDCLOS
+
+	CALL	%c1	:	%counter
+	CALL	%c2	:	%counter
+
+	RET
+ENDFUNC

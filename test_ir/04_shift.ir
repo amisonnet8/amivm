@@ -1,0 +1,12 @@
+// シフト演算(SHL/SHR)のテスト
+FUNC	!main	:
+	VAR	%a	^int
+	VAR	%r1	^int
+	VAR	%r2	^int
+
+	SET	%a	8
+	SHL	%r1	%a	2
+	SHR	%r2	%a	2
+
+	RET
+ENDFUNC

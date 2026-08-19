@@ -1,0 +1,17 @@
+// メソッド呼び出し(FNTYPE + FGETでfile.Closeを取得して呼ぶ)のテスト
+FNTYPE	^CloseFn	:	^error
+
+FUNC	!main	:
+	VAR	%f	^*os.File
+	VAR	%err	^error
+	VAR	%closeFn	^CloseFn
+	VAR	%closeErr	^error
+
+	CALL	%f	%err	:	?os.Open	"go.mod"
+
+	FGET	%closeFn	%f	>Close
+
+	CALL	%closeErr	:	%closeFn
+
+	RET
+ENDFUNC

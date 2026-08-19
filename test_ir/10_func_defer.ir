@@ -1,0 +1,25 @@
+// 関数呼び出し・複数戻り値・DEFERのテスト
+FUNC	!divmod	^int	^int	:	^int	^int
+	VAR	%q	^int
+	VAR	%r	^int
+	DIV	%q	$1	$2
+	MOD	%r	$1	$2
+	RET	%q	%r
+ENDFUNC
+
+FUNC	!greet	^string	:
+	CALL	:	?fmt.Println	$1
+ENDFUNC
+
+FUNC	!main	:
+	VAR	%q	^int
+	VAR	%r	^int
+
+	DEFER	!greet	"deferred hello"
+
+	CALL	%q	%r	:	!divmod	17	5
+
+	CALL	:	!greet	"main hello"
+
+	RET
+ENDFUNC

@@ -1,0 +1,25 @@
+// 変数定義(VAR/GVAR)のテスト
+GVAR	@gCounter	^int
+GVAR	@gName	^string
+
+FUNC	!main	:
+	VAR	%i	^int
+	VAR	%f	^float64
+	VAR	%s	^string
+	VAR	%b	^bool
+	VAR	%r	^rune
+	VAR	%arr	^[5]int
+	VAR	%pi	^*int
+
+	SET	%i	42
+	SET	%f	3.14
+	SET	%s	"hello"
+	SET	%b	true
+	SET	%r	'A'
+	ADDR	%pi	%i
+
+	SET	@gCounter	1
+	SET	@gName	"world"
+
+	RET
+ENDFUNC
