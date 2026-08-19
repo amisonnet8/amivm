@@ -1,5 +1,7 @@
 # AMIVM
 
+[![test](https://github.com/amisonnet8/amivm/actions/workflows/test.yml/badge.svg)](https://github.com/amisonnet8/amivm/actions/workflows/test.yml)
+
 AMIVMは、独自の中間表現(**AMIVM-IR**)をGoのソースコードに変換するコンパイル基盤です。Goの並行処理機構(goroutine・channel)は後付けではなく、IRの段階から直接組み込まれているのが特徴です。
 
 > [English README is here](README.md)
@@ -178,6 +180,7 @@ docs/
   amivm_code_design.md        コンパイラ内部の設計メモ
 Makefile                    ビルド・テスト・クリーンアップ用タスク(`make help`で一覧表示)
 test_ir/                    命令カテゴリ別のサンプルIR
+.github/workflows/test.yml  CI: push/PR時にgofmt/go vet/go test/make testを実行
 CLAUDE.md                   AIによる開発支援のためのプロジェクト規約
 LICENSE                     MIT
 ```

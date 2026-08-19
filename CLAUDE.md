@@ -30,6 +30,7 @@ Goの並行処理(goroutine/channel)を中間言語に直接取り込んでい�
 | `README.md` / `README_ja.md` | GitHub向けの導入ドキュメント(英語版/日本語版) |
 | `test_ir/` | 命令カテゴリ別のサンプルIR。新しい命令・構文を実装したら対応するファイルを追加・更新して`go build`まで通すこと |
 | `CLAUDE.md` | 本ファイル。AIによる開発支援のための規約・注意点 |
+| `.github/workflows/test.yml` | GitHub Actions。push/PR時に`gofmt`・`go vet`・`go test`・`make test`(test_ir一括検証)を自動実行する |
 
 以降の節で単に`amivm_spec.md`のようにファイル名だけで参照している箇所は、いずれも`docs/`配下を指す。
 
@@ -149,3 +150,4 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 2. 実装したら実際に`go build`(および可能なら生成したGoコードの`go build`・実行)で動作確認する。**このプロジェクトは「動かして初めて見つかるバグ」が実際に複数回発生している**(前節参照)。ロジック上正しそうに見えても、必ず`test_ir/`のサンプルを通して確認すること(`make test`で一括検証できる。生成物は一時ディレクトリに書き出すため、リポジトリ直下を汚さない)
 3. `amivm_spec.md`と矛盾する挙動を見つけたら、まず`amivm_spec.md`側の記述を疑い、仕様として確定してからコードを直す
 4. 仕様(`amivm_spec.md`)を変更したら、`amivm_instruction_spec.md`・`amivm_code_design.md`・README・`test_ir/`のうち影響を受ける箇所も同じタイミングで更新する(ドキュメント間の不整合を残さない)
+5. `.github/workflows/test.yml`によりpush/PR時に`gofmt`・`go vet`・`go test`・`make test`がGitHub Actionsで自動実行される。ローカルでこれらを一通り確認してからpushすること(CIで初めて失敗に気づくのは避ける)

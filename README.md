@@ -1,5 +1,7 @@
 # AMIVM
 
+[![test](https://github.com/amisonnet8/amivm/actions/workflows/test.yml/badge.svg)](https://github.com/amisonnet8/amivm/actions/workflows/test.yml)
+
 AMIVM is a compilation toolchain that translates a custom intermediate representation (**AMIVM-IR**) into Go source code. Go's concurrency primitives — goroutines and channels — are built directly into the IR, rather than bolted on afterward.
 
 > [日本語版 README はこちら](README_ja.md)
@@ -178,6 +180,7 @@ docs/
   amivm_code_design.md        how the compiler is put together internally
 Makefile                    build/test/clean tasks (`make help` for the full list)
 test_ir/                    example IR programs, one file per instruction group
+.github/workflows/test.yml  CI: gofmt/go vet/go test/make test on push and PR
 CLAUDE.md                   project conventions for AI-assisted development
 LICENSE                     MIT
 ```
