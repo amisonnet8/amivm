@@ -40,7 +40,15 @@ go build -o amivm ./cmd/amivm
 make build
 ```
 
-開発中の別プロジェクト(例: AMIVM-IRを出力するフロントエンド言語実装)から`amivm`を使いたい場合は、バイナリをコピーして回るのではなく`PATH`の通った場所にインストールする。
+このリポジトリをクローンせずに、リリース済みの`amivm`を最新版で入れたい場合。
+
+```sh
+go install github.com/amisonnet8/amivm/cmd/amivm@latest
+```
+
+`$GOBIN`(未設定なら`$GOPATH/bin`)に配置されるので、そのディレクトリが`PATH`に通っていることを確認する。
+
+開発中の別プロジェクト(例: AMIVM-IRを出力するフロントエンド言語実装)から`amivm`を使いたい場合は、バイナリをコピーして回るのではなく、ローカルにクローンした本リポジトリから`PATH`の通った場所にインストールする。
 
 ```sh
 make install   # go install ./cmd/amivm — $GOBIN(未設定なら$GOPATH/bin)に配置される

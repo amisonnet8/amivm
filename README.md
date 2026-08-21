@@ -40,7 +40,15 @@ or, using the provided `Makefile` (`make help` lists all targets, including `tes
 make build
 ```
 
-To use `amivm` from another project under development (e.g. a language front end targeting AMIVM-IR), install it onto your `PATH` instead of copying the binary around:
+To install the latest released `amivm` without cloning this repo:
+
+```sh
+go install github.com/amisonnet8/amivm/cmd/amivm@latest
+```
+
+This lands in `$GOBIN` (or `$GOPATH/bin` if unset) — make sure that directory is on your `PATH`.
+
+To use `amivm` from another project under development (e.g. a language front end targeting AMIVM-IR), install it onto your `PATH` from your local clone instead of copying the binary around:
 
 ```sh
 make install   # go install ./cmd/amivm — lands in $GOBIN, or $GOPATH/bin if unset
