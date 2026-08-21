@@ -1,4 +1,4 @@
-module amivm
+module github.com/amisonnet8/amivm
 
 go 1.26.5
 
