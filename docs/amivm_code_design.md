@@ -235,6 +235,7 @@ type Category int
 const (
     CatVa Category = iota
     CatGv
+    CatShallow
     CatSingle
     CatMulti
     CatVariable
@@ -268,7 +269,7 @@ number := mergeKinds(integer, kindSet(KFloat))
 m[CatNumber] = number
 ```
 
-`identRefFull`(`$N`/`&N`/`%xxx`/`@xxx`/`@xxx.yyy`)と`identRefNoSel`(`@xxx.yyy`を除いた4種)という2つの基礎集合を用意し、ほとんどのカテゴリはどちらかをベースにリテラル系Kindを足すだけで構築できる。`single`/`multi`は`identRefNoSel`ベース(`multi`はさらに`KBlank`を追加)、それ以外の値系カテゴリ(`whole`/`integer`/`number`/`boolean`/`slice`/`ordered`/`value`/`variable`)は`identRefFull`ベース。
+`identRefFull`(`$N`/`&N`/`%xxx`/`@xxx`/`@xxx.yyy`)と`identRefNoSel`(`@xxx.yyy`を除いた4種)という2つの基礎集合を用意し、ほとんどのカテゴリはどちらかをベースにリテラル系Kindを足すだけで構築できる。`single1`/`single2`/`multi`は`identRefNoSel`ベース(`multi`はさらに`KBlank`を追加)、それ以外の値系カテゴリ(`whole`/`integer`/`number`/`boolean`/`slice`/`ordered`/`value`/`variable`)は`identRefFull`ベース。`shallow`(`CLOS`の代入先)だけは`identRefNoSel`からさらに`KClosureParam`(`&N`)を除いた`identRefShallow`(`KParam`/`KLocal`/`KGlobal`)という専用の基礎集合を使う。関数リテラルごとに閉じたスコープしか持たない`&N`は、外側の`CLOS`の代入先として意味を持たないため。
 
 `atomExpr(a Atom, funcName string, cat Category) (ast.Expr, error)`が「カテゴリ確認 → `atomToExpr`呼び出し」を直列に実行する共通のエントリポイントで、命令別のパース関数はこれだけを呼べばよい。`classify`は`tokenizeAndClassify`でのみ呼ばれ、命令ごとのパース処理からは一切呼ばれない。
 
@@ -326,7 +327,7 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 }
 ```
 
-`:`が0個・2個以上のどちらもエラーにする。`FUNC`/`FNTYPE`はこれで「パラメータ型列 / 戻り値型列」を、`CALL`は「代入先(`multi`列) / 呼び出し対象+引数列」を、`CLOS`は「パラメータ型列 / 戻り値型列」(`local`はその前で別途取り出す)を分割する。`DEFER`/`SPAWN`は`:`を使わないため`splitColon`は呼ばない。
+`:`が0個・2個以上のどちらもエラーにする。`FUNC`/`FNTYPE`はこれで「パラメータ型列 / 戻り値型列」を、`CALL`は「代入先(`multi`列) / 呼び出し対象+引数列」を、`CLOS`は「パラメータ型列 / 戻り値型列」(`shallow`はその前で別途取り出す)を分割する。`DEFER`/`SPAWN`は`:`を使わないため`splitColon`は呼ばない。
 
 ## 5. ブロック構造の組み立て
 
@@ -338,7 +339,7 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 
 - 通常の行は`parseSingleLine`でそのままパースして追加
 - `SEL`行が出てきたら`parseSelectBlock`に処理を委譲する
-- `CLOS`行が出てきたら`parseClosSignature`でシグネチャを解析し、`parseBody`を`"ENDCLOS"`終端で再帰呼び出しして本体を構築、`*ast.FuncLit`にラップして`local`への代入文(`ast.AssignStmt`, `token.ASSIGN`)として積む
+- `CLOS`行が出てきたら`parseClosSignature`でシグネチャを解析し、`parseBody`を`"ENDCLOS"`終端で再帰呼び出しして本体を構築、`*ast.FuncLit`にラップして`shallow`(代入先)への代入文(`ast.AssignStmt`, `token.ASSIGN`)として積む
 - それ以外の行(`LABEL`含む)は全て`parseSingleLine`にそのまま渡す
 
 `LABEL`は`amivm_spec.md`の定義(`LABEL label → label: ;`)どおり、**次の行が何であるかに関わらず常に**`&ast.LabeledStmt{Stmt: &ast.EmptyStmt{}}`を生成する1行完結の命令であり、`parseSingleLine`側の通常の`case "LABEL"`(`parseLabel`)で処理する。

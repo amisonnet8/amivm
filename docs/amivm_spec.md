@@ -79,64 +79,64 @@ Goコード
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
-| `SET single value1` | `single = value1` | |
-| `ASET single whole value1` | `single[whole] = value1` | |
-| `AGET single variable whole` | `single = variable[whole]` | |
-| `PSET single value1` | `*single = value1` | |
-| `PGET single variable` | `single = *variable` | |
-| `ADDR single variable (point)` | `point`無し: `single = &variable` / `point`が`>xxx_123`: `single = &variable.point` / `point`が`>xxx_123`ではない: `single = &variable[point]` | `&variable[point]`はスライス/配列専用。mapに使うとgo/typesエラーになる(想定通りの挙動) |
+| `SET single1 value1` | `single1 = value1` | |
+| `ASET single1 whole value1` | `single1[whole] = value1` | |
+| `AGET single1 variable whole` | `single1 = variable[whole]` | |
+| `PSET single1 value1` | `*single1 = value1` | |
+| `PGET single1 variable` | `single1 = *variable` | |
+| `ADDR single1 variable (point)` | `point`無し: `single1 = &variable` / `point`が`>xxx_123`: `single1 = &variable.point` / `point`が`>xxx_123`ではない: `single1 = &variable[point]` | `&variable[point]`はスライス/配列専用。mapに使うとgo/typesエラーになる(想定通りの挙動) |
 
 ### 4.3 算術演算
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `ADD single number1 number2` | `single = number1 + number2` |
-| `SUB single number1 number2` | `single = number1 - number2` |
-| `MUL single number1 number2` | `single = number1 * number2` |
-| `DIV single number1 number2` | `single = number1 / number2` |
-| `MOD single integer1 integer2` | `single = integer1 % integer2` |
+| `ADD single1 number1 number2` | `single1 = number1 + number2` |
+| `SUB single1 number1 number2` | `single1 = number1 - number2` |
+| `MUL single1 number1 number2` | `single1 = number1 * number2` |
+| `DIV single1 number1 number2` | `single1 = number1 / number2` |
+| `MOD single1 integer1 integer2` | `single1 = integer1 % integer2` |
 
 ### 4.4 ビット演算
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `BAND single integer1 integer2` | `single = integer1 & integer2` |
-| `BOR single integer1 integer2` | `single = integer1 \| integer2` |
-| `BXOR single integer1 integer2` | `single = integer1 ^ integer2` |
-| `BCLEAR single integer1 integer2` | `single = integer1 &^ integer2` |
-| `BNOT single integer1` | `single = ^integer1` |
+| `BAND single1 integer1 integer2` | `single1 = integer1 & integer2` |
+| `BOR single1 integer1 integer2` | `single1 = integer1 \| integer2` |
+| `BXOR single1 integer1 integer2` | `single1 = integer1 ^ integer2` |
+| `BCLEAR single1 integer1 integer2` | `single1 = integer1 &^ integer2` |
+| `BNOT single1 integer1` | `single1 = ^integer1` |
 
 ### 4.5 シフト演算
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `SHL single integer1 whole` | `single = integer1 << whole` |
-| `SHR single integer1 whole` | `single = integer1 >> whole` |
+| `SHL single1 integer1 whole` | `single1 = integer1 << whole` |
+| `SHR single1 integer1 whole` | `single1 = integer1 >> whole` |
 
 ### 4.6 論理演算
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `AND single boolean1 boolean2` | `single = boolean1 && boolean2` |
-| `OR single boolean1 boolean2` | `single = boolean1 \|\| boolean2` |
-| `NOT single boolean1` | `single = !boolean1` |
+| `AND single1 boolean1 boolean2` | `single1 = boolean1 && boolean2` |
+| `OR single1 boolean1 boolean2` | `single1 = boolean1 \|\| boolean2` |
+| `NOT single1 boolean1` | `single1 = !boolean1` |
 
 ### 4.7 比較演算
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `EQ single value1 value2` | `single = value1 == value2` |
-| `NEQ single value1 value2` | `single = value1 != value2` |
-| `LT single ordered1 ordered2` | `single = ordered1 < ordered2` |
-| `LTE single ordered1 ordered2` | `single = ordered1 <= ordered2` |
-| `GT single ordered1 ordered2` | `single = ordered1 > ordered2` |
-| `GTE single ordered1 ordered2` | `single = ordered1 >= ordered2` |
+| `EQ single1 value1 value2` | `single1 = value1 == value2` |
+| `NEQ single1 value1 value2` | `single1 = value1 != value2` |
+| `LT single1 ordered1 ordered2` | `single1 = ordered1 < ordered2` |
+| `LTE single1 ordered1 ordered2` | `single1 = ordered1 <= ordered2` |
+| `GT single1 ordered1 ordered2` | `single1 = ordered1 > ordered2` |
+| `GTE single1 ordered1 ordered2` | `single1 = ordered1 >= ordered2` |
 
 ### 4.8 文字列連結
 
 | 命令 | 生成されるGoコード |
 |---|---|
-| `CONCAT single slice1 slice2 ...` | `single = slice1 + slice2 ...` |
+| `CONCAT single1 slice1 slice2 ...` | `single1 = slice1 + slice2 ...` |
 
 ### 4.9 ラベル・分岐
 
@@ -167,17 +167,17 @@ Goコード
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `CHTYPE deftype type1` | `type deftype chan type1` | 関数外 |
-| `CHMAKE single deftype whole` | `single = make(deftype, whole)` | |
-| `CHSEND single value1` | `single <- value1` | |
-| `CHRECV multi1 (multi2) single` | `multi1(, multi2) = <-single` | |
+| `CHMAKE single1 deftype whole` | `single1 = make(deftype, whole)` | |
+| `CHSEND single1 value1` | `single1 <- value1` | |
+| `CHRECV multi1 (multi2) single1` | `multi1(, multi2) = <-single1` | |
 
 ### 4.13 select
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `SEL` | `select {` | |
-| `CASESEND single value1 label` | `case single <- value1: goto label` | `SEL`内 |
-| `CASERECV multi1 (multi2) single label` | `case multi1(, multi2) = <-single: goto label` | `SEL`内 |
+| `CASESEND single1 value1 label` | `case single1 <- value1: goto label` | `SEL`内 |
+| `CASERECV multi1 (multi2) single1 label` | `case multi1(, multi2) = <-single1: goto label` | `SEL`内 |
 | `DEFAULT label` | `default: goto label` | `SEL`内 |
 | `ENDSEL` | `}` | `SEL`終端 |
 
@@ -186,8 +186,8 @@ Goコード
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `SLTYPE deftype type1` | `type deftype []type1` | 関数外 |
-| `SLMAKE single deftype whole` | `single = make(deftype, whole)` | |
-| `SLICE single slice1 from to` | `single = slice1[from:to]` | |
+| `SLMAKE single1 deftype whole` | `single1 = make(deftype, whole)` | |
+| `SLICE single1 slice1 from to` | `single1 = slice1[from:to]` | |
 
 ### 4.15 構造体
 
@@ -196,17 +196,17 @@ Goコード
 | `STTYPE deftype` | `type deftype struct {` | 関数外 |
 | `FIELD field type1` | `field type1` | `STTYPE`内 |
 | `ENDSTTYPE` | `}` | `STTYPE`終端 |
-| `FSET single field value1` | `single.field = value1` | |
-| `FGET single variable field` | `single = variable.field` | |
+| `FSET single1 field value1` | `single1.field = value1` | |
+| `FGET single1 variable field` | `single1 = variable.field` | |
 
 ### 4.16 map
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `MPTYPE deftype type1 type2` | `type deftype map[type1]type2` | 関数外 |
-| `MPMAKE single deftype` | `single = make(deftype)` | |
-| `MSET single value1 value2` | `single[value1] = value2` | |
-| `MGET multi1 (multi2) single value1` | `multi1(, multi2) = single[value1]` | |
+| `MPMAKE single1 deftype` | `single1 = make(deftype)` | |
+| `MSET single1 value1 value2` | `single1[value1] = value2` | |
+| `MGET multi1 (multi2) single1 value1` | `multi1(, multi2) = single1[value1]` | |
 | `MPKEYS single1 single2` | `single1 = slices.Collect(maps.Keys(single2))` | `slices`/`maps`パッケージ(Go標準ライブラリ)を利用。mapを走査する手段として使う |
 
 ### 4.17 クロージャー・関数型
@@ -214,7 +214,7 @@ Goコード
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `FNTYPE deftype type1 type2 ... : type3 type4 ...` | `type deftype func(type1, type2 ...) (type3, type4 ...)` | 関数外 |
-| `CLOS local type1 type2 ... : type3 type4 ...` | `local = func(amivm_closure_param1 type1, amivm_closure_param2 type2 ...) (type3, type4 ...) {` | |
+| `CLOS shallow type1 type2 ... : type3 type4 ...` | `shallow = func(amivm_closure_param1 type1, amivm_closure_param2 type2 ...) (type3, type4 ...) {` | |
 | `ENDCLOS` | `}` | `CLOS`終端 |
 
 ## 5. オペランドカテゴリ
@@ -232,14 +232,15 @@ Goコード
 | `variable` | 変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` |
 | `local` | `VAR`変数名 | `%xxx_123` |
 | `global` | `GVAR`変数名 | `@xxx_123` |
-| `single` | 単一左辺・チャネル変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` |
+| `shallow` | 関数レベル以上の変数 | `$N` / `%xxx_123` / `@xxx_123` |
+| `single1 single2` | 単一左辺・チャネル変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` |
 | `multi1 multi2` | 複数左辺 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `_` |
 | `field` | 構造体フィールド名 | `>xxx_123` |
 | `point` | `ADDR`でフィールド/添字を指定する対象 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `>xxx_123` |
 | `type1 type2 type3 type4` | 型 | `^xxx_123` / `^xxx_123.xxx_123` / `^*xxx_123` / `^*xxx_123.xxx_123` / `^[n]xxx_123` / `^[n]xxx_123.xxx_123` / `^[n]*xxx_123` / `^[n]*xxx_123.xxx_123` |
 | `deftype` | 定義型 | `^xxx_123` |
 | `defname` | 定義関数名 | `!xxx_123` / `!main` |
-| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` / `$N` / `&N` |
+| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` / `@xxx_123` / `$N` / `&N` |
 | `label` | ラベル名 | `#xxx_123` |
 
 ## 6. トークンの形状分類(Kind)

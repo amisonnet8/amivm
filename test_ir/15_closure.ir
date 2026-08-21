@@ -3,6 +3,8 @@ FNTYPE	^BinOp	^int	^int	:	^int
 FNTYPE	^Provider	:	^int
 FNTYPE	^IntOp	^int	:	^int
 
+GVAR	@globalAdder	^BinOp
+
 FUNC	!triple	^int	:	^int
 	VAR	%r	^int
 	MUL	%r	$1	3
@@ -13,6 +15,19 @@ ENDFUNC
 // callnameとして直接呼び出せることのテスト
 FUNC	!applyBinOp	^BinOp	^int	^int	:	^int
 	VAR	%r	^int
+	CALL	%r	:	$1	$2	$3
+	RET	%r
+ENDFUNC
+
+// CLOSの代入先(shallow)に$N(関数パラメータ)を使えることのテスト。
+// パラメータとして受け取ったクロージャーを、関数内で新しいクロージャーに差し替えてから呼ぶ
+FUNC	!replaceAndCall	^BinOp	^int	^int	:	^int
+	VAR	%r	^int
+	CLOS	$1	^int	^int	:	^int
+		VAR	%s	^int
+		ADD	%s	&1	&2
+		RET	%s
+	ENDCLOS
 	CALL	%r	:	$1	$2	$3
 	RET	%r
 ENDFUNC
@@ -28,6 +43,8 @@ FUNC	!main	:
 	VAR	%viaParam	^int
 	VAR	%fn	^IntOp
 	VAR	%viaValue	^int
+	VAR	%viaReplacedParam	^int
+	VAR	%viaGlobal	^int
 
 	SET	%base	100
 	SET	%count	0
@@ -55,6 +72,18 @@ FUNC	!main	:
 	// AMIVM内定義関数そのものを値として変数に代入し、後から呼び出す(value拡張)
 	SET	%fn	!triple
 	CALL	%viaValue	:	%fn	7
+
+	// CLOSの代入先(shallow)に$N(関数パラメータ)を使えることのテスト
+	CALL	%viaReplacedParam	:	!replaceAndCall	%adder	8	9
+
+	// CLOSの代入先(shallow)に@xxx_123(パッケージレベル変数)を使えることのテスト。
+	// callnameに@xxx_123を使えることのテストも兼ねる
+	CLOS	@globalAdder	^int	^int	:	^int
+		VAR	%s	^int
+		ADD	%s	&1	&2
+		RET	%s
+	ENDCLOS
+	CALL	%viaGlobal	:	@globalAdder	10	20
 
 	RET
 ENDFUNC

@@ -89,9 +89,9 @@ func parseFuncSignature(line string) (defName string, params []*ast.Field, resul
 	return defName, params, results, nil
 }
 
-// parseClosSignature は「CLOS local type1 type2 ... : type3 type4 ...」を解釈する。
-// funcNameは、CLOSを内包する外側のFUNCの名前(localの解決・&Nに包まれる$N/%xxxの解決に必要)。
-func parseClosSignature(line, funcName string) (localExpr ast.Expr, funcType *ast.FuncType, err error) {
+// parseClosSignature は「CLOS shallow type1 type2 ... : type3 type4 ...」を解釈する。
+// funcNameは、CLOSを内包する外側のFUNCの名前(shallowの解決・&Nに包まれる$N/%xxxの解決に必要)。
+func parseClosSignature(line, funcName string) (shallowExpr ast.Expr, funcType *ast.FuncType, err error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 || atoms[0].Raw != "CLOS" {
 		return nil, nil, fmt.Errorf("CLOS構文が不正です: %s", line)
@@ -100,8 +100,8 @@ func parseClosSignature(line, funcName string) (localExpr ast.Expr, funcType *as
 	if len(rest) == 0 {
 		return nil, nil, fmt.Errorf("CLOS構文が不正です(代入先変数がありません): %s", line)
 	}
-	localAtom := rest[0]
-	localExpr, err = atomExpr(localAtom, funcName, CatVa)
+	shallowAtom := rest[0]
+	shallowExpr, err = atomExpr(shallowAtom, funcName, CatShallow)
 	if err != nil {
 		return nil, nil, fmt.Errorf("CLOSの代入先が不正です: %w", err)
 	}
@@ -118,7 +118,7 @@ func parseClosSignature(line, funcName string) (localExpr ast.Expr, funcType *as
 		return nil, nil, fmt.Errorf("CLOSのパラメータ型が不正です: %w", err)
 	}
 	funcType = &ast.FuncType{Params: &ast.FieldList{List: params}, Results: fieldListOrNil(results)}
-	return localExpr, funcType, nil
+	return shallowExpr, funcType, nil
 }
 
 // parseBody は開始位置から、blockEnd に一致する行が見つかるまでを本体としてパースする。
@@ -149,7 +149,7 @@ func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt
 			i = next
 			continue
 		case "CLOS":
-			localExpr, funcType, err := parseClosSignature(line, funcName)
+			shallowExpr, funcType, err := parseClosSignature(line, funcName)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -159,7 +159,7 @@ func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt
 			}
 			funcLit := &ast.FuncLit{Type: funcType, Body: &ast.BlockStmt{List: body}}
 			stmts = append(stmts, &ast.AssignStmt{
-				Lhs: []ast.Expr{localExpr}, Tok: token.ASSIGN, Rhs: []ast.Expr{funcLit},
+				Lhs: []ast.Expr{shallowExpr}, Tok: token.ASSIGN, Rhs: []ast.Expr{funcLit},
 			})
 			i = next
 			continue

@@ -38,34 +38,34 @@
 |---|---|
 | `VAR local type1` | `var local type1`(関数内のみ) |
 | `GVAR global type1` | `var global type1`(関数外のみ) |
-| `SET single value1` | `single = value1` |
-| `ASET single whole value1` | `single[whole] = value1` |
-| `AGET single variable whole` | `single = variable[whole]` |
-| `PSET single value1` | `*single = value1` |
-| `PGET single variable` | `single = *variable` |
-| `ADDR single variable (point)` | `point`無し: `single = &variable` / `point`が`>xxx`: `single = &variable.point` / それ以外: `single = &variable[point]` |
-| `ADD single number1 number2` | `single = number1 + number2` |
-| `SUB single number1 number2` | `single = number1 - number2` |
-| `MUL single number1 number2` | `single = number1 * number2` |
-| `DIV single number1 number2` | `single = number1 / number2` |
-| `MOD single integer1 integer2` | `single = integer1 % integer2` |
-| `BAND single integer1 integer2` | `single = integer1 & integer2` |
-| `BOR single integer1 integer2` | `single = integer1 \| integer2` |
-| `BXOR single integer1 integer2` | `single = integer1 ^ integer2` |
-| `BCLEAR single integer1 integer2` | `single = integer1 &^ integer2` |
-| `BNOT single integer1` | `single = ^integer1` |
-| `SHL single integer1 whole` | `single = integer1 << whole` |
-| `SHR single integer1 whole` | `single = integer1 >> whole` |
-| `AND single boolean1 boolean2` | `single = boolean1 && boolean2` |
-| `OR single boolean1 boolean2` | `single = boolean1 \|\| boolean2` |
-| `NOT single boolean1` | `single = !boolean1` |
-| `EQ single value1 value2` | `single = value1 == value2` |
-| `NEQ single value1 value2` | `single = value1 != value2` |
-| `LT single ordered1 ordered2` | `single = ordered1 < ordered2` |
-| `LTE single ordered1 ordered2` | `single = ordered1 <= ordered2` |
-| `GT single ordered1 ordered2` | `single = ordered1 > ordered2` |
-| `GTE single ordered1 ordered2` | `single = ordered1 >= ordered2` |
-| `CONCAT single slice1 slice2 ...` | `single = slice1 + slice2 ...` |
+| `SET single1 value1` | `single1 = value1` |
+| `ASET single1 whole value1` | `single1[whole] = value1` |
+| `AGET single1 variable whole` | `single1 = variable[whole]` |
+| `PSET single1 value1` | `*single1 = value1` |
+| `PGET single1 variable` | `single1 = *variable` |
+| `ADDR single1 variable (point)` | `point`無し: `single1 = &variable` / `point`が`>xxx`: `single1 = &variable.point` / それ以外: `single1 = &variable[point]` |
+| `ADD single1 number1 number2` | `single1 = number1 + number2` |
+| `SUB single1 number1 number2` | `single1 = number1 - number2` |
+| `MUL single1 number1 number2` | `single1 = number1 * number2` |
+| `DIV single1 number1 number2` | `single1 = number1 / number2` |
+| `MOD single1 integer1 integer2` | `single1 = integer1 % integer2` |
+| `BAND single1 integer1 integer2` | `single1 = integer1 & integer2` |
+| `BOR single1 integer1 integer2` | `single1 = integer1 \| integer2` |
+| `BXOR single1 integer1 integer2` | `single1 = integer1 ^ integer2` |
+| `BCLEAR single1 integer1 integer2` | `single1 = integer1 &^ integer2` |
+| `BNOT single1 integer1` | `single1 = ^integer1` |
+| `SHL single1 integer1 whole` | `single1 = integer1 << whole` |
+| `SHR single1 integer1 whole` | `single1 = integer1 >> whole` |
+| `AND single1 boolean1 boolean2` | `single1 = boolean1 && boolean2` |
+| `OR single1 boolean1 boolean2` | `single1 = boolean1 \|\| boolean2` |
+| `NOT single1 boolean1` | `single1 = !boolean1` |
+| `EQ single1 value1 value2` | `single1 = value1 == value2` |
+| `NEQ single1 value1 value2` | `single1 = value1 != value2` |
+| `LT single1 ordered1 ordered2` | `single1 = ordered1 < ordered2` |
+| `LTE single1 ordered1 ordered2` | `single1 = ordered1 <= ordered2` |
+| `GT single1 ordered1 ordered2` | `single1 = ordered1 > ordered2` |
+| `GTE single1 ordered1 ordered2` | `single1 = ordered1 >= ordered2` |
+| `CONCAT single1 slice1 slice2 ...` | `single1 = slice1 + slice2 ...` |
 | `LABEL label` | `label: ;` |
 | `GOTO label` | `goto label` |
 | `IF boolean1 label` | `if boolean1 { goto label }` |
@@ -76,29 +76,29 @@
 | `DEFER callname value1 value2 ...` | `defer callname(value1, value2 ...)` |
 | `SPAWN callname value1 value2 ...` | `go callname(value1, value2 ...)` |
 | `CHTYPE deftype type1` | `type deftype chan type1`(関数外) |
-| `CHMAKE single deftype whole` | `single = make(deftype, whole)` |
-| `CHSEND single value1` | `single <- value1` |
-| `CHRECV multi1 (multi2) single` | `multi1(, multi2) = <-single` |
+| `CHMAKE single1 deftype whole` | `single1 = make(deftype, whole)` |
+| `CHSEND single1 value1` | `single1 <- value1` |
+| `CHRECV multi1 (multi2) single1` | `multi1(, multi2) = <-single1` |
 | `SEL` | `select {` |
-| `CASESEND single value1 label` | `case single <- value1: goto label`(`SEL`内) |
-| `CASERECV multi1 (multi2) single label` | `case multi1(, multi2) = <-single: goto label`(`SEL`内) |
+| `CASESEND single1 value1 label` | `case single1 <- value1: goto label`(`SEL`内) |
+| `CASERECV multi1 (multi2) single1 label` | `case multi1(, multi2) = <-single1: goto label`(`SEL`内) |
 | `DEFAULT label` | `default: goto label`(`SEL`内) |
 | `ENDSEL` | `}`(`SEL`終端) |
 | `SLTYPE deftype type1` | `type deftype []type1`(関数外) |
-| `SLMAKE single deftype whole` | `single = make(deftype, whole)` |
-| `SLICE single slice1 from to` | `single = slice1[from:to]` |
+| `SLMAKE single1 deftype whole` | `single1 = make(deftype, whole)` |
+| `SLICE single1 slice1 from to` | `single1 = slice1[from:to]` |
 | `STTYPE deftype` | `type deftype struct {`(関数外) |
 | `FIELD field type1` | `field type1`(`STTYPE`内) |
 | `ENDSTTYPE` | `}`(`STTYPE`終端) |
-| `FSET single field value1` | `single.field = value1` |
-| `FGET single variable field` | `single = variable.field` |
+| `FSET single1 field value1` | `single1.field = value1` |
+| `FGET single1 variable field` | `single1 = variable.field` |
 | `MPTYPE deftype type1 type2` | `type deftype map[type1]type2`(関数外) |
-| `MPMAKE single deftype` | `single = make(deftype)` |
-| `MSET single value1 value2` | `single[value1] = value2` |
-| `MGET multi1 (multi2) single value1` | `multi1(, multi2) = single[value1]` |
+| `MPMAKE single1 deftype` | `single1 = make(deftype)` |
+| `MSET single1 value1 value2` | `single1[value1] = value2` |
+| `MGET multi1 (multi2) single1 value1` | `multi1(, multi2) = single1[value1]` |
 | `MPKEYS single1 single2` | `single1 = slices.Collect(maps.Keys(single2))` |
 | `FNTYPE deftype type1 type2 ... : type3 type4 ...` | `type deftype func(type1, type2 ...) (type3, type4 ...)`(関数外) |
-| `CLOS local type1 type2 ... : type3 type4 ...` | `local = func(&1 type1, &2 type2 ...) (type3, type4 ...) {` |
+| `CLOS shallow type1 type2 ... : type3 type4 ...` | `shallow = func(&1 type1, &2 type2 ...) (type3, type4 ...) {` |
 | `ENDCLOS` | `}`(`CLOS`終端) |
 
 `ADD`は数値演算専用(常に2オペランド)。文字列連結は`CONCAT`(可変長引数)で行う。キャスト(型変換)・組み込み関数(`close`/`len`/`cap`等)は専用命令を持たず、`CALL`に統合している(9節参照)。
@@ -113,7 +113,7 @@
 
 - `FUNC`/`FNTYPE`: `:`より前がパラメータ型列、後が戻り値型列
 - `CALL`: `:`より前が代入先(`multi`列、0個以上)、後が呼び出し対象+引数列
-- `CLOS`: `local`の次から`:`より前がパラメータ型列、後が戻り値型列
+- `CLOS`: `shallow`の次から`:`より前がパラメータ型列、後が戻り値型列
 
 `:`が無い、または2個以上あるとパースエラーになる(パラメータ・戻り値・代入先が0個の場合でも`:`自体は省略できない)。`DEFER`/`SPAWN`は`callname value1 value2 ...`のみで`:`を使わない。
 
@@ -142,14 +142,15 @@
 各カテゴリの識別子側の許容範囲は、`$N`/`&N`/`%xxx`/`@xxx`に加えて`@xxx.yyy`(他パッケージ参照)を含むかどうかで大きく2系統に分かれる。
 
 - **フル系**(`@xxx.yyy`含む): `whole`/`integer`/`number`/`boolean`/`from`・`to`/`slice`/`ordered`/`value`/`variable`
-- **単純系**(`@xxx.yyy`含まない): `single`/`multi`(`multi`はさらに`_`を許容)
+- **単純系**(`@xxx.yyy`含まない): `single1`/`single2`/`multi`(`multi`はさらに`_`を許容)/`shallow`(さらに`&N`も除く)
 
 | カテゴリ | 意味 | 許容形式 |
 |---|---|---|
 | `local` | `VAR`宣言名(関数内) | `%xxx` |
 | `global` | `GVAR`宣言名(関数外) | `@xxx` |
-| `single` | 単一左辺・チャネル/スライス/マップ/構造体変数の参照 | `$N` / `&N` / `%xxx` / `@xxx` |
-| `multi1 multi2` | 複数左辺(`CALL`/`CHRECV`/`CASERECV`/`MGET`の代入先) | `single`の形式 + `_` |
+| `shallow` | 関数レベル以上の変数(`CLOS`の代入先) | `$N` / `%xxx` / `@xxx` |
+| `single1 single2` | 単一左辺・チャネル/スライス/マップ/構造体変数の参照 | `$N` / `&N` / `%xxx` / `@xxx` |
+| `multi1 multi2` | 複数左辺(`CALL`/`CHRECV`/`CASERECV`/`MGET`の代入先) | `single1`/`single2`の形式 + `_` |
 | `variable` | 読み取り専用の変数参照(`AGET`/`PGET`/`ADDR`/`FGET`の読み出し元) | `$N` / `&N` / `%xxx` / `@xxx` / `@xxx.yyy` |
 | `field` | 構造体フィールド名 | `>xxx` |
 | `type1 type2 type3 type4` | 型表現(7節) | `^xxx`系8パターン |
@@ -164,10 +165,10 @@
 | `ordered1 ordered2` | 順序比較可能な値 | フル系識別子 + `0`,`1234`,`-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` |
 | `value1 value2` | 値全般(最も緩い) | `ordered`の形式 + `true`,`false` / `nil` / `!xxx` / `?xxx` / `?xxx.yyy`(関数そのものを、呼び出さずに値として渡す) |
 | `defname` | AMIVM内で定義する関数名 | `!xxx` / `!main` |
-| `callname` | 呼び出し対象 | `!xxx` / `!main` / `?xxx` / `?xxx.yyy` / `%xxx`(関数値・メソッド値・クロージャーを保持するローカル変数) / `$N` / `&N`(パラメータ・クロージャー引数として受け取った関数値をそのまま呼び出す) |
+| `callname` | 呼び出し対象 | `!xxx` / `!main` / `?xxx` / `?xxx.yyy` / `%xxx`(関数値・メソッド値・クロージャーを保持するローカル変数) / `@xxx`(同、パッケージレベル変数) / `$N` / `&N`(パラメータ・クロージャー引数として受け取った関数値をそのまま呼び出す) |
 | `label` | ラベル名 | `#xxx` |
 
-`local`/`global`(宣言名)・`single`・`deftype`は他のカテゴリより狭く、対応するプレフィックス1種類のみを許容する。`callname`に`%xxx`が含まれるのは、構造体のメソッド値やクロージャーを保持したローカル変数をそのまま呼び出せるようにするため(8節参照)。`$N`/`&N`も同じ理由で含まれている。クロージャーをパラメータ(`$N`)やクロージャー引数(`&N`)として受け取った側でそのまま呼び出したいケースに対応するためで、以前はこれが抜けており「クロージャーを引数で渡してもそのまま呼び出せない」という仕様上の不備だった。
+`local`/`global`(宣言名)・`deftype`は他のカテゴリより狭く、対応するプレフィックス1種類のみを許容する。`shallow`はそれよりやや広く、関数レベル以上の変数(`$N`/`%xxx`/`@xxx`)を許容するが、関数リテラルごとに閉じたスコープしか持たない`&N`(クロージャー引数)は含まない。`callname`に`%xxx`/`@xxx`が含まれるのは、構造体のメソッド値やクロージャーを保持したローカル変数・パッケージレベル変数をそのまま呼び出せるようにするため(8節参照)。`$N`/`&N`も同じ理由で含まれている。クロージャーをパラメータ(`$N`)やクロージャー引数(`&N`)として受け取った側でそのまま呼び出したいケースに対応するためで、以前はこれが抜けており「クロージャーを引数で渡してもそのまま呼び出せない」という仕様上の不備だった。
 
 ## 6. コンテナ型はいずれも`TYPE`系命令による事前宣言が必須
 
@@ -183,7 +184,7 @@ MPTYPE	^StrIntMap	^string	^int  // type StrIntMap map[string]int
 
 ### スライス式(部分列の取得)
 
-`SLICE single slice1 from to`という専用命令で、スライス・配列・文字列から部分列を取得する(`single = slice1[from:to]`)。`from`/`to`はどちらも`_`で省略可能で、省略時はGo側で空欄になる(`slice1[:to]`のように)。
+`SLICE single1 slice1 from to`という専用命令で、スライス・配列・文字列から部分列を取得する(`single1 = slice1[from:to]`)。`from`/`to`はどちらも`_`で省略可能で、省略時はGo側で空欄になる(`slice1[:to]`のように)。
 
 ## 7. 型表現(`^`)
 
@@ -220,7 +221,7 @@ ENDSTTYPE
 構造体の**メソッド呼び出し**(例: `file.Close()`)は、次の2段階で表現する。
 
 1. `FNTYPE`で(レシーバーを除いた)メソッドの関数型を`deftype`として宣言する
-2. `FGET`で、その構造体変数からメソッドを**値(Goのメソッド値)として取り出す**(`FGET single variable field`の`field`がメソッド名の場合、`single = variable.field`はメソッド値の取得になる)
+2. `FGET`で、その構造体変数からメソッドを**値(Goのメソッド値)として取り出す**(`FGET single1 variable field`の`field`がメソッド名の場合、`single1 = variable.field`はメソッド値の取得になる)
 3. 取り出したメソッド値を`%`(ローカル変数)に保持し、`CALL`の呼び出し対象としてそのまま使う(`callname`カテゴリに`%xxx`が含まれる理由)
 
 ```
@@ -248,7 +249,7 @@ CALL	%x	:	?int	%y
 
 ## 10. クロージャー
 
-`FNTYPE`でクロージャー変数の型(`deftype`)を宣言し、`CLOS`〜`ENDCLOS`で本体を組み立てて既存の`VAR`変数(`local`)に代入する。クロージャー引数は`&N`(`amivm_closure_paramN`)、外側の`FUNC`の`$N`/`%xxx`/`@xxx`は通常のGoのクロージャーと同様にそのまま参照(キャプチャ)できる。
+`FNTYPE`でクロージャー変数の型(`deftype`)を宣言し、`CLOS`〜`ENDCLOS`で本体を組み立てて既存の`shallow`変数(`$N`/`%xxx`/`@xxx`。事前に`VAR`/`GVAR`で宣言済み、または関数パラメータとして存在する変数)に代入する。クロージャー引数は`&N`(`amivm_closure_paramN`)、外側の`FUNC`の`$N`/`%xxx`/`@xxx`は通常のGoのクロージャーと同様にそのまま参照(キャプチャ)できる。
 
 ```
 FNTYPE	^BinOp	^int	^int	:	^int
@@ -260,6 +261,17 @@ CLOS	%adder	^int	^int	:	^int
 	RET	%sum
 ENDCLOS
 CALL	%result	:	%adder	1	2
+```
+
+代入先は`%xxx`(ローカル変数)に限らない。関数パラメータ(`$N`)をクロージャーで差し替えたり、パッケージレベル変数(`@xxx`)にクロージャーを代入することもできる(後者はそのまま`callname`として`@xxx`を使って呼び出せる)。`test_ir/15_closure.ir`に実例がある。
+
+```
+CLOS	@globalAdder	^int	^int	:	^int
+	VAR	%s	^int
+	ADD	%s	&1	&2
+	RET	%s
+ENDCLOS
+CALL	%viaGlobal	:	@globalAdder	10	20
 ```
 
 `CLOS`は`FUNC`本体内にのみ出現し、ネスト不可。`LABEL`の直後に`SEL`/`CLOS`が来る場合の扱いは11節参照。
@@ -336,12 +348,20 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 amivm-IRを使って2つの言語実装を書いてみたところ、次の4つの不備が見つかった(回避策はあったが、いずれも本来amivm側で解消すべきもの)。
 
-1. **`ADDR`が単純な`&variable`しか表現できなかった**。`&p.x`(構造体フィールドのアドレス)や`&xs[0]`(スライス/配列要素のアドレス)を、既存命令の組み合わせでは取得できなかった。`ADDR single variable (point)`という形に拡張し、`point`の有無・種類(`>xxx`かそれ以外か)で`single = &variable` / `&variable.point` / `&variable[point]`に分岐するようにした。`point`という新カテゴリは`whole`(0以上の整数)に`>xxx`(フィールド名)を加えただけで、新しいKindの追加は不要だった
+1. **`ADDR`が単純な`&variable`しか表現できなかった**。`&p.x`(構造体フィールドのアドレス)や`&xs[0]`(スライス/配列要素のアドレス)を、既存命令の組み合わせでは取得できなかった。`ADDR single1 variable (point)`という形に拡張し、`point`の有無・種類(`>xxx`かそれ以外か)で`single1 = &variable` / `&variable.point` / `&variable[point]`に分岐するようにした。`point`という新カテゴリは`whole`(0以上の整数)に`>xxx`(フィールド名)を加えただけで、新しいKindの追加は不要だった
 2. **`callname`にクロージャー引数(`&N`)・パラメータ(`$N`)が含まれていなかった**。パラメータとしてクロージャーを受け取った関数の中で、そのクロージャーをそのまま呼び出せない(`CALL : $1 ...`ができない)という、完全な仕様ミスだった。`callname`に`$N`/`&N`を追加して解消した
 3. **mapを走査する手段が無かった**。AMIVM-IRには`for range`に相当する命令が無く、mapの全キーを列挙する方法が用意されていなかった。`MPKEYS single1 single2`(`single1 = slices.Collect(maps.Keys(single2))`)を新設して解消した
 4. **`value`に「関数そのもの」を渡す手段が無かった**。関数を呼び出す(`CALL`)ことはできても、関数を値として(呼び出さずに)変数や引数に渡すことができなかった。`value1 value2`カテゴリに`!xxx`/`?xxx`/`?xxx.yyy`を追加して解消した
 
 いずれも、既存のKind体系・命令セットの枠組みの中で「カテゴリの許容範囲を広げる」「命令に省略可能な引数を1つ足す」「命令を1つ足す」という形で解決でき、Kindの新設や既存命令の破壊的変更は不要だった。
+
+### `callname`への`@xxx`追加、`CLOS`の代入先を`local`から`shallow`に拡張した経緯
+
+上記と同様、実装を進める中で見つかった不備。`callname`(呼び出し対象)は`%xxx`(ローカル変数に保持した関数値・メソッド値・クロージャー)を呼び出せるのに、同じ役割をパッケージレベル変数(`@xxx`)で持たせることができなかった。また`CLOS`の代入先は`local`(`%xxx`のみ)に固定されており、関数パラメータ(`$N`)やパッケージレベル変数(`@xxx`)にクロージャーを代入することができなかった。どちらも「クロージャー・関数値を保持できる変数の種類が、ローカル変数(`%xxx`)に偏っている」という同根の制約で、パッケージレベルで関数値を保持したい(例: シングルトン的なコールバックテーブル)ケースや、パラメータで受け取ったクロージャーをその場で差し替えたいケースに対応できなかった。
+
+解消のため、`CLOS`の代入先カテゴリを`local`(`%xxx`のみ)から新設の`shallow`(`$N`/`%xxx`/`@xxx`。関数レベル以上の変数)に拡張し、`callname`に`@xxx`を追加した。`shallow`が`&N`(クロージャー引数)を含まないのは、`&N`はクロージャー本体(関数リテラル)ごとに閉じたスコープしか持たず、外側で`CLOS`の代入先として参照する対象にならないため。
+
+この変更にあわせて、`single`カテゴリの表記も「命令内の1つ目のオペランドは`single1`、2つ目は`single2`」というルールに統一した(元々`MPKEYS`だけがこの命名だったが、他の命令は単に`single`のままで表記が揺れていたため)。
 
 ### `LABEL`を常に`label: ;`にする変更
 
@@ -356,7 +376,7 @@ amivm-IRを使って2つの言語実装を書いてみたところ、次の4つ�
 - **`CALL`/`FUNC`/`FNTYPE`/`CLOS`に`:`区切りを導入**。以前の「`!`/`?`で始まる最初のトークンを走査して呼び出し対象を探す」方式から変更した
 - **`CASE SEND`/`CASE RECV`を`CASESEND`/`CASERECV`の1語に統合**
 - **`//`コメント行のサポートを追加**
-- **旧`ch`カテゴリ(チャネル/スライス共有)を`single`に統合**し、意味を「単一左辺、チャネル/スライス/マップ/構造体変数」に整理した
+- **旧`ch`カテゴリ(チャネル/スライス共有)を`single1`/`single2`(当時は`single`)に統合**し、意味を「単一左辺、チャネル/スライス/マップ/構造体変数」に整理した
 - **`CLOS`/`ENDCLOS`(クロージャー)を追加**。`&N`という専用プレフィックスの引数を持つ
 
 ### それ以前の変更点
