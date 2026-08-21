@@ -14,7 +14,6 @@ type Category int
 const (
 	CatVa Category = iota
 	CatGv
-	CatShallow
 	CatSingle
 	CatMulti
 	CatVariable
@@ -37,7 +36,7 @@ const (
 
 var categoryLabel = map[Category]string{
 	CatVa: "VAR変数名", CatGv: "GVAR変数名",
-	CatShallow: "関数レベル以上の変数", CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
+	CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
 	CatVariable: "変数参照", CatType: "型", CatDeftype: "定義型",
 	CatField: "構造体フィールド名", CatPoint: "ADDRのフィールド/添字対象",
 	CatWhole: "0以上の整数", CatFromTo: "スライス範囲(from/to)",
@@ -70,9 +69,6 @@ var (
 	// identRefNoSel: identRefFullから@xxx.yyy(他パッケージ参照)を除いたもの。
 	// 「single」「multi」カテゴリで使う。
 	identRefNoSel = kindSet(KParam, KClosureParam, KLocal, KGlobal)
-	// identRefShallow: identRefNoSelから&N(クロージャー引数)を除いたもの。関数レベル以上の
-	// 変数(パラメータ・関数内変数・パッケージ変数)のみを許容する「shallow」カテゴリで使う。
-	identRefShallow = kindSet(KParam, KLocal, KGlobal)
 
 	typeKindsAll = kindSet(
 		KType, KTypeSel, KTypePtr, KTypePtrSel,
@@ -87,7 +83,6 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 
 	m[CatVa] = kindSet(KLocal)
 	m[CatGv] = kindSet(KGlobal)
-	m[CatShallow] = identRefShallow
 	m[CatSingle] = identRefNoSel
 	m[CatMulti] = mergeKinds(identRefNoSel, kindSet(KBlank))
 	m[CatVariable] = identRefFull
@@ -133,11 +128,11 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	return m
 }
 
-func atomExpr(a Atom, funcName string, cat Category) (ast.Expr, error) {
+func atomExpr(a Atom, funcName string, closureLevel int, cat Category) (ast.Expr, error) {
 	if err := checkKind(a, cat); err != nil {
 		return nil, err
 	}
-	return atomToExpr(a, funcName)
+	return atomToExpr(a, funcName, closureLevel)
 }
 
 // checkKind はKindがカテゴリの許容集合に属するかだけを検証する。ast.Exprを組み立てない

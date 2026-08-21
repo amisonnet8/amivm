@@ -80,24 +80,24 @@ func splitLinesTrimmed(source string) []string {
 
 ## 2. 命令の判定(第1段階: 緩い判定)
 
-`parseSingleLine(line, funcName string) (ast.Stmt, error)`
+`parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error)`
 
-`tokenizeAndClassify`で分類済みの`Atom`列を受け取り、**先頭Atomの文字列(`Raw`)だけ**を見て、対応するパース関数に振り分ける。命令名(`VAR`, `ADD`など)は予約語なので、`Kind`(値としての種別)ではなく`Raw`文字列で判定する。
+`tokenizeAndClassify`で分類済みの`Atom`列を受け取り、**先頭Atomの文字列(`Raw`)だけ**を見て、対応するパース関数に振り分ける。命令名(`VAR`, `ADD`など)は予約語なので、`Kind`(値としての種別)ではなく`Raw`文字列で判定する。`closureLevel`は、この行が現在どの`CLOS`ネスト深さにいるか(`FUNC`直下なら0)を表し、`&N`(自分の階層のクロージャー引数)の解決に使う(9節参照)。
 
 ```go
-func parseSingleLine(line, funcName string) (ast.Stmt, error) {
+func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) {
     atoms := tokenizeAndClassify(line)
     kw := atoms[0].Raw
     rest := atoms[1:]
     switch kw {
     case "VAR":
-        return parseVar(rest, funcName)
+        return parseVar(rest, funcName, closureLevel)
     case "ASET":
-        return parseAset(rest, funcName)
+        return parseAset(rest, funcName, closureLevel)
     case "FSET":
-        return parseFset(rest, funcName)
+        return parseFset(rest, funcName, closureLevel)
     case "MSET":
-        return parseMset(rest, funcName)
+        return parseMset(rest, funcName, closureLevel)
     // ...
     default:
         return nil, fmt.Errorf("未知の命令です: %s", line)
@@ -206,12 +206,12 @@ func classify(tok string) Atom {
 ### `atomToExpr` — AST組み立て
 
 ```go
-func atomToExpr(a Atom, funcName string) (ast.Expr, error) {
+func atomToExpr(a Atom, funcName string, closureLevel int) (ast.Expr, error) {
     switch a.Kind {
     case KParam:
         return paramBaseExpr(funcName, a.A)
     case KClosureParam:
-        return closureParamBaseExpr(a.A), nil
+        return closureParamBaseExpr(a, closureLevel), nil
     case KArrType:
         return arrayTypeExpr(a.A, ast.NewIdent(a.B))
     case KArrTypeSel:
@@ -221,7 +221,9 @@ func atomToExpr(a Atom, funcName string) (ast.Expr, error) {
 }
 ```
 
-`$N`→Go識別子(`paramBaseExpr`)、`&N`→Go識別子(`closureParamBaseExpr`、関数名による修飾なし)、`%xxx`→Go識別子(`localBaseExpr`)、`@xxx`/`@xxx.yyy`→Go識別子(`globalBaseExpr`/`globalSelBaseExpr`)、配列型組み立て(`arrayTypeExpr`)、スライス型組み立て(`sliceTypeExpr`、`TYPE`系命令からのみ呼ばれる)、チャネル型組み立て(`chanTypeExpr`、同様)という7つのヘルパーに要素部分の`ast.Expr`を渡すだけで済む形にしている。
+`$N`→Go識別子(`paramBaseExpr`)、`&N`/`&L-N`→Go識別子(`closureParamBaseExpr`、関数名による修飾なし)、`%xxx`→Go識別子(`localBaseExpr`)、`@xxx`/`@xxx.yyy`→Go識別子(`globalBaseExpr`/`globalSelBaseExpr`)、配列型組み立て(`arrayTypeExpr`)、スライス型組み立て(`sliceTypeExpr`、`TYPE`系命令からのみ呼ばれる)、チャネル型組み立て(`chanTypeExpr`、同様)という7つのヘルパーに要素部分の`ast.Expr`を渡すだけで済む形にしている。
+
+`closureParamBaseExpr(a Atom, closureLevel int)`は、`a.B`(明示的な階層。`&L-N`の`L`)が空なら引数で渡された`closureLevel`(その`Atom`が書かれている位置自体のネスト深さ)を、そうでなければ`a.B`をパースした値を階層として使い、`amivm_closureL_paramN`というGo識別子を組み立てる。`closureLevel`は`&N`の解決以外には使わないため、`KClosureParam`以外のKindを処理する分岐では単に無視される。
 
 `ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`が組み立てる`ast.IndexExpr`/`ast.StarExpr`/`ast.UnaryExpr`/`ast.SelectorExpr`/`ast.SliceExpr`は、`atomToExpr`のKind分岐ではなく各命令のパース関数(`parseAset`等)内で直接組み立てる。これらは「ある1つのAtomの形」ではなく「2〜3個のAtomの組み合わせ」から作る式なので、Kind単位で完結する`atomToExpr`には乗らない。
 
@@ -235,7 +237,6 @@ type Category int
 const (
     CatVa Category = iota
     CatGv
-    CatShallow
     CatSingle
     CatMulti
     CatVariable
@@ -269,9 +270,9 @@ number := mergeKinds(integer, kindSet(KFloat))
 m[CatNumber] = number
 ```
 
-`identRefFull`(`$N`/`&N`/`%xxx`/`@xxx`/`@xxx.yyy`)と`identRefNoSel`(`@xxx.yyy`を除いた4種)という2つの基礎集合を用意し、ほとんどのカテゴリはどちらかをベースにリテラル系Kindを足すだけで構築できる。`single1`/`single2`/`multi`は`identRefNoSel`ベース(`multi`はさらに`KBlank`を追加)、それ以外の値系カテゴリ(`whole`/`integer`/`number`/`boolean`/`slice`/`ordered`/`value`/`variable`)は`identRefFull`ベース。`shallow`(`CLOS`の代入先)だけは`identRefNoSel`からさらに`KClosureParam`(`&N`)を除いた`identRefShallow`(`KParam`/`KLocal`/`KGlobal`)という専用の基礎集合を使う。関数リテラルごとに閉じたスコープしか持たない`&N`は、外側の`CLOS`の代入先として意味を持たないため。
+`identRefFull`(`$N`/`&N`/`%xxx`/`@xxx`/`@xxx.yyy`)と`identRefNoSel`(`@xxx.yyy`を除いた4種)という2つの基礎集合を用意し、ほとんどのカテゴリはどちらかをベースにリテラル系Kindを足すだけで構築できる。`single1`/`single2`/`multi`は`identRefNoSel`ベース(`multi`はさらに`KBlank`を追加)、それ以外の値系カテゴリ(`whole`/`integer`/`number`/`boolean`/`slice`/`ordered`/`value`/`variable`)は`identRefFull`ベース。`CLOS`の代入先は`CatSingle`をそのまま流用しており、専用カテゴリは無い(`&N`/`&L-N`でクロージャー引数を代入し直すケースも`identRefNoSel`が既に`KClosureParam`を含むためそのまま扱える。かつては`KClosureParam`を除いた専用の`CatShallow`があったが、`CLOS`のネスト対応で不要になり削除された。経緯は`amivm_instruction_spec.md`13節参照)。
 
-`atomExpr(a Atom, funcName string, cat Category) (ast.Expr, error)`が「カテゴリ確認 → `atomToExpr`呼び出し」を直列に実行する共通のエントリポイントで、命令別のパース関数はこれだけを呼べばよい。`classify`は`tokenizeAndClassify`でのみ呼ばれ、命令ごとのパース処理からは一切呼ばれない。
+`atomExpr(a Atom, funcName string, closureLevel int, cat Category) (ast.Expr, error)`が「カテゴリ確認 → `atomToExpr`呼び出し」を直列に実行する共通のエントリポイントで、命令別のパース関数はこれだけを呼べばよい。`classify`は`tokenizeAndClassify`でのみ呼ばれ、命令ごとのパース処理からは一切呼ばれない。
 
 ### `checkKind` — 検証のみで組み立てを伴わない場合
 
@@ -283,11 +284,11 @@ m[CatNumber] = number
 どちらも「動かして初めて見つかったバグ」で、実際に`VAR`と`GOTO`が常にエラーになっていた。対処として、Kind判定だけを行い`ast.Expr`を組み立てない`checkKind`を切り出し、検証専用の箇所は全てこちらに置き換えた。
 
 ```go
-func atomExpr(a Atom, funcName string, cat Category) (ast.Expr, error) {
+func atomExpr(a Atom, funcName string, closureLevel int, cat Category) (ast.Expr, error) {
     if err := checkKind(a, cat); err != nil {
         return nil, err
     }
-    return atomToExpr(a, funcName)
+    return atomToExpr(a, funcName, closureLevel)
 }
 
 func checkKind(a Atom, cat Category) error {
@@ -327,7 +328,7 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 }
 ```
 
-`:`が0個・2個以上のどちらもエラーにする。`FUNC`/`FNTYPE`はこれで「パラメータ型列 / 戻り値型列」を、`CALL`は「代入先(`multi`列) / 呼び出し対象+引数列」を、`CLOS`は「パラメータ型列 / 戻り値型列」(`shallow`はその前で別途取り出す)を分割する。`DEFER`/`SPAWN`は`:`を使わないため`splitColon`は呼ばない。
+`:`が0個・2個以上のどちらもエラーにする。`FUNC`/`FNTYPE`はこれで「パラメータ型列 / 戻り値型列」を、`CALL`は「代入先(`multi`列) / 呼び出し対象+引数列」を、`CLOS`は「パラメータ型列 / 戻り値型列」(代入先はその前で別途取り出す)を分割する。`DEFER`/`SPAWN`は`:`を使わないため`splitColon`は呼ばない。
 
 ## 5. ブロック構造の組み立て
 
@@ -335,12 +336,26 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 
 ### `parseBody` — `FUNC`/`CLOS`本体の構築
 
-開始位置から、指定した終端キーワード(`ENDFUNC`または`ENDCLOS`)が現れるまでの行を走査し、`[]ast.Stmt`を組み立てる。`FUNC`本体と`CLOS`本体は同じ`parseBody`を再帰的に使い回している(`CLOS`は`funcName`を外側の`FUNC`のものそのまま引き継ぐ。`CLOS`自体は無名で専用の名前空間を持たないため、内部で`VAR`宣言した変数は外側の関数名で修飾される)。
+開始位置から、指定した終端キーワード(`ENDFUNC`または`ENDCLOS`)が現れるまでの行を走査し、`[]ast.Stmt`を組み立てる。`FUNC`本体と`CLOS`本体は同じ`parseBody`を再帰的に使い回している(`CLOS`は`funcName`を外側の`FUNC`のものそのまま引き継ぐ。`CLOS`自体は無名で専用の名前空間を持たないため、内部で`VAR`宣言した変数は外側の関数名で修飾される)。`FUNC`/`STTYPE`/`SEL`と異なり`CLOS`だけはネストできるため、`parseBody`は`closureLevel int`という引数も受け取り、現在地点のクロージャーネスト深さ(`FUNC`直下なら0)を再帰呼び出しに引き継ぐ。
 
-- 通常の行は`parseSingleLine`でそのままパースして追加
-- `SEL`行が出てきたら`parseSelectBlock`に処理を委譲する
-- `CLOS`行が出てきたら`parseClosSignature`でシグネチャを解析し、`parseBody`を`"ENDCLOS"`終端で再帰呼び出しして本体を構築、`*ast.FuncLit`にラップして`shallow`(代入先)への代入文(`ast.AssignStmt`, `token.ASSIGN`)として積む
+- 通常の行は`parseSingleLine`にそのまま`closureLevel`を渡してパースして追加
+- `SEL`行が出てきたら`closureLevel`をそのまま引き継いで`parseSelectBlock`に処理を委譲する(`SEL`自体はネストの深さを変えない)
+- `CLOS`行が出てきたら`parseClosSignature`でシグネチャを解析する。代入先(`single1`)は現在の`closureLevel`で解決し、本体側は`closureLevel+1`(`newLevel`)を`parseBody`の再帰呼び出しに渡す。`*ast.FuncLit`にラップして代入先への代入文(`ast.AssignStmt`, `token.ASSIGN`)として積む
 - それ以外の行(`LABEL`含む)は全て`parseSingleLine`にそのまま渡す
+
+```go
+case "CLOS":
+    targetExpr, funcType, newLevel, err := parseClosSignature(line, funcName, closureLevel)
+    // ...
+    body, next, err := parseBody(lines, i+1, funcName, newLevel, "ENDCLOS")
+    // ...
+    funcLit := &ast.FuncLit{Type: funcType, Body: &ast.BlockStmt{List: body}}
+    stmts = append(stmts, &ast.AssignStmt{
+        Lhs: []ast.Expr{targetExpr}, Tok: token.ASSIGN, Rhs: []ast.Expr{funcLit},
+    })
+```
+
+`newLevel`(=`closureLevel+1`)は、このクロージャー自身のパラメータ名(`amivm_closureL_paramN`)にも使われる。代入先の解決に`closureLevel`(ネスト前の深さ)を、パラメータ名と本体に`newLevel`(ネスト後の深さ)を使い分けているのが、ネスト対応の要点。代入先自身は「今書いている場所」にある変数(外側の`CLOS`のクロージャー引数を含む)を指し、本体はこれから1段深くなった新しいスコープだからである。
 
 `LABEL`は`amivm_spec.md`の定義(`LABEL label → label: ;`)どおり、**次の行が何であるかに関わらず常に**`&ast.LabeledStmt{Stmt: &ast.EmptyStmt{}}`を生成する1行完結の命令であり、`parseSingleLine`側の通常の`case "LABEL"`(`parseLabel`)で処理する。
 
@@ -422,6 +437,8 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
 ```
 
 `CLOS`は`func`リテラルとして独立したブロックスコープを作るため、これを省略すると`CLOS`本体で未使用になった`VAR`変数(`fn.Body.List`の直接の要素ではなく、`AssignStmt.Rhs`の`*ast.FuncLit.Body.List`の中にある)を発見できず、命名規則ベースの絞り込み(所属関数の特定)は成功してもVAR宣言そのものが見つからない、という状態に陥る。この場合の安全網として、該当箇所が見つからなければ全関数の末尾に`_ = x`を追加するフォールバックが残っているが、通常は上記の再帰探索で正しい挿入位置が見つかる。
+
+`insertBlankInNested`の`*ast.AssignStmt`ケースは深さの上限を持たない再帰呼び出しのため、`CLOS`のネスト対応(3節参照)にあたってこの関数自体は変更不要だった。`CLOS`が2重・3重にネストしていても、`*ast.FuncLit`の中にさらに`*ast.FuncLit`を含む`AssignStmt`が現れるだけで、`findAndInsertBlank`→`insertBlankInNested`→`findAndInsertBlank`...という呼び出しの繰り返しがネストの深さ分だけ自然に積み重なる。
 
 なお、Goの言語仕様上「未使用」でエラーになるのは`var`宣言されたローカル変数のみで、関数パラメータ(`$N`)やクロージャー引数(`&N`)は未使用でもエラーにならないため、この救済処理の対象になるのは常に`VAR`由来の変数だけである。
 

@@ -1,7 +1,11 @@
-// クロージャー(CLOS/ENDCLOS)のテスト。callname/valueへの関数拡張のテストも含む
+// クロージャー(CLOS/ENDCLOS)のテスト。callname/valueへの関数拡張、CLOSのネスト、
+// &N(自分の階層)/&L-N(階層Lを明示)のテストも含む
 FNTYPE	^BinOp	^int	^int	:	^int
 FNTYPE	^Provider	:	^int
 FNTYPE	^IntOp	^int	:	^int
+FNTYPE	^Adder	^int	:	^int
+FNTYPE	^Adder2	^int	:	^Adder
+FNTYPE	^Curry3	^int	:	^Adder2
 
 GVAR	@globalAdder	^BinOp
 
@@ -19,7 +23,7 @@ FUNC	!applyBinOp	^BinOp	^int	^int	:	^int
 	RET	%r
 ENDFUNC
 
-// CLOSの代入先(shallow)に$N(関数パラメータ)を使えることのテスト。
+// CLOSの代入先(single1)に$N(関数パラメータ)を使えることのテスト。
 // パラメータとして受け取ったクロージャーを、関数内で新しいクロージャーに差し替えてから呼ぶ
 FUNC	!replaceAndCall	^BinOp	^int	^int	:	^int
 	VAR	%r	^int
@@ -30,6 +34,28 @@ FUNC	!replaceAndCall	^BinOp	^int	^int	:	^int
 	ENDCLOS
 	CALL	%r	:	$1	$2	$3
 	RET	%r
+ENDFUNC
+
+// CLOSのネストのテスト。curry3(a)(b)(c) = a + b + c という3段カリー化関数。
+// 一番内側のCLOS(階層3)から、自分の階層(&1)・1つ外側(&2-1)・2つ外側(&1-1)を
+// それぞれ参照する
+FUNC	!curry3	:	^Curry3
+	VAR	%f	^Curry3
+	CLOS	%f	^int	:	^Adder2
+		VAR	%g	^Adder2
+		CLOS	%g	^int	:	^Adder
+			VAR	%h	^Adder
+			CLOS	%h	^int	:	^int
+				VAR	%s	^int
+				ADD	%s	&1	&2-1
+				ADD	%s	%s	&1-1
+				RET	%s
+			ENDCLOS
+			RET	%h
+		ENDCLOS
+		RET	%g
+	ENDCLOS
+	RET	%f
 ENDFUNC
 
 FUNC	!main	:
@@ -45,6 +71,10 @@ FUNC	!main	:
 	VAR	%viaValue	^int
 	VAR	%viaReplacedParam	^int
 	VAR	%viaGlobal	^int
+	VAR	%curried	^Curry3
+	VAR	%step1	^Adder2
+	VAR	%step2	^Adder
+	VAR	%sum3	^int
 
 	SET	%base	100
 	SET	%count	0
@@ -76,7 +106,7 @@ FUNC	!main	:
 	// CLOSの代入先(shallow)に$N(関数パラメータ)を使えることのテスト
 	CALL	%viaReplacedParam	:	!replaceAndCall	%adder	8	9
 
-	// CLOSの代入先(shallow)に@xxx_123(パッケージレベル変数)を使えることのテスト。
+	// CLOSの代入先(single1)に@xxx_123(パッケージレベル変数)を使えることのテスト。
 	// callnameに@xxx_123を使えることのテストも兼ねる
 	CLOS	@globalAdder	^int	^int	:	^int
 		VAR	%s	^int
@@ -84,6 +114,12 @@ FUNC	!main	:
 		RET	%s
 	ENDCLOS
 	CALL	%viaGlobal	:	@globalAdder	10	20
+
+	// CLOSのネスト(3階層)のテスト。curry3(1)(2)(3) = 6 になるはず
+	CALL	%curried	:	!curry3
+	CALL	%step1	:	%curried	1
+	CALL	%step2	:	%step1	2
+	CALL	%sum3	:	%step2	3
 
 	RET
 ENDFUNC

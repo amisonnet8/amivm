@@ -16,7 +16,7 @@ import (
 func typeFieldsUnnamed(atoms []Atom) ([]*ast.Field, error) {
 	var fields []*ast.Field
 	for _, a := range atoms {
-		te, err := atomExpr(a, "", CatType)
+		te, err := atomExpr(a, "", 0, CatType)
 		if err != nil {
 			return nil, err
 		}
@@ -30,7 +30,7 @@ func typeFieldsUnnamed(atoms []Atom) ([]*ast.Field, error) {
 func typeFieldsNamed(atoms []Atom, namer func(i int) string) ([]*ast.Field, error) {
 	var fields []*ast.Field
 	for i, a := range atoms {
-		te, err := atomExpr(a, "", CatType)
+		te, err := atomExpr(a, "", 0, CatType)
 		if err != nil {
 			return nil, err
 		}
@@ -89,43 +89,48 @@ func parseFuncSignature(line string) (defName string, params []*ast.Field, resul
 	return defName, params, results, nil
 }
 
-// parseClosSignature は「CLOS shallow type1 type2 ... : type3 type4 ...」を解釈する。
-// funcNameは、CLOSを内包する外側のFUNCの名前(shallowの解決・&Nに包まれる$N/%xxxの解決に必要)。
-func parseClosSignature(line, funcName string) (shallowExpr ast.Expr, funcType *ast.FuncType, err error) {
+// parseClosSignature は「CLOS single1 type1 type2 ... : type3 type4 ...」を解釈する。
+// funcNameは、CLOSを内包する外側のFUNCの名前(代入先の解決・&Nに包まれる$N/%xxxの解決に必要)。
+// currentLevelは、このCLOS命令が書かれている位置自体のクロージャーネスト深さ(FUNC直下なら0)。
+// 代入先(single1)は現在のスコープにある変数を指すためcurrentLevelで解決するが、これから
+// 作る本体はさらに1段ネストが深くなるため、そのnewLevel(=currentLevel+1)をパラメータの
+// 命名・戻り値として使う。
+func parseClosSignature(line, funcName string, currentLevel int) (targetExpr ast.Expr, funcType *ast.FuncType, newLevel int, err error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 || atoms[0].Raw != "CLOS" {
-		return nil, nil, fmt.Errorf("CLOS構文が不正です: %s", line)
+		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です: %s", line)
 	}
 	rest := atoms[1:]
 	if len(rest) == 0 {
-		return nil, nil, fmt.Errorf("CLOS構文が不正です(代入先変数がありません): %s", line)
+		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です(代入先変数がありません): %s", line)
 	}
-	shallowAtom := rest[0]
-	shallowExpr, err = atomExpr(shallowAtom, funcName, CatShallow)
+	targetAtom := rest[0]
+	targetExpr, err = atomExpr(targetAtom, funcName, currentLevel, CatSingle)
 	if err != nil {
-		return nil, nil, fmt.Errorf("CLOSの代入先が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("CLOSの代入先が不正です: %w", err)
 	}
 	paramAtoms, resultAtoms, err := splitColon(rest[1:])
 	if err != nil {
-		return nil, nil, fmt.Errorf("CLOS構文が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です: %w", err)
 	}
 	results, err := typeFieldsUnnamed(resultAtoms)
 	if err != nil {
-		return nil, nil, fmt.Errorf("CLOSの戻り値型が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("CLOSの戻り値型が不正です: %w", err)
 	}
-	params, err := typeFieldsNamed(paramAtoms, func(i int) string { return closureParamGoName(i + 1) })
+	newLevel = currentLevel + 1
+	params, err := typeFieldsNamed(paramAtoms, func(i int) string { return closureParamGoName(newLevel, i+1) })
 	if err != nil {
-		return nil, nil, fmt.Errorf("CLOSのパラメータ型が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("CLOSのパラメータ型が不正です: %w", err)
 	}
 	funcType = &ast.FuncType{Params: &ast.FieldList{List: params}, Results: fieldListOrNil(results)}
-	return shallowExpr, funcType, nil
+	return targetExpr, funcType, newLevel, nil
 }
 
 // parseBody は開始位置から、blockEnd に一致する行が見つかるまでを本体としてパースする。
 // SEL・CLOSは別ブロックとして先読みする。LABELはIR.txtの定義(`LABEL label → label: ;`)
 // どおり常に空文とセットで1行完結する命令のため、先読みは不要で他の1行命令と同様
 // parseSingleLine(defaultケース)に委ねる。
-func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt, int, error) {
+func parseBody(lines []string, start int, funcName string, closureLevel int, blockEnd string) ([]ast.Stmt, int, error) {
 	var stmts []ast.Stmt
 	i := start
 	for i < len(lines) {
@@ -141,7 +146,7 @@ func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt
 			i++
 			continue
 		case "SEL":
-			selStmt, next, err := parseSelectBlock(lines, i+1, funcName)
+			selStmt, next, err := parseSelectBlock(lines, i+1, funcName, closureLevel)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -149,22 +154,22 @@ func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt
 			i = next
 			continue
 		case "CLOS":
-			shallowExpr, funcType, err := parseClosSignature(line, funcName)
+			targetExpr, funcType, newLevel, err := parseClosSignature(line, funcName, closureLevel)
 			if err != nil {
 				return nil, 0, err
 			}
-			body, next, err := parseBody(lines, i+1, funcName, "ENDCLOS")
+			body, next, err := parseBody(lines, i+1, funcName, newLevel, "ENDCLOS")
 			if err != nil {
 				return nil, 0, err
 			}
 			funcLit := &ast.FuncLit{Type: funcType, Body: &ast.BlockStmt{List: body}}
 			stmts = append(stmts, &ast.AssignStmt{
-				Lhs: []ast.Expr{shallowExpr}, Tok: token.ASSIGN, Rhs: []ast.Expr{funcLit},
+				Lhs: []ast.Expr{targetExpr}, Tok: token.ASSIGN, Rhs: []ast.Expr{funcLit},
 			})
 			i = next
 			continue
 		default:
-			stmt, err := parseSingleLine(line, funcName)
+			stmt, err := parseSingleLine(line, funcName, closureLevel)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -177,7 +182,7 @@ func parseBody(lines []string, start int, funcName, blockEnd string) ([]ast.Stmt
 	return nil, 0, fmt.Errorf("対応する%sが見つかりません", blockEnd)
 }
 
-func parseSelectBlock(lines []string, start int, funcName string) (ast.Stmt, int, error) {
+func parseSelectBlock(lines []string, start int, funcName string, closureLevel int) (ast.Stmt, int, error) {
 	var clauses []ast.Stmt
 	i := start
 	for i < len(lines) {
@@ -186,7 +191,7 @@ func parseSelectBlock(lines []string, start int, funcName string) (ast.Stmt, int
 		if kw == "ENDSEL" {
 			return &ast.SelectStmt{Body: &ast.BlockStmt{List: clauses}}, i + 1, nil
 		}
-		clause, err := parseCaseOrDefault(line, funcName)
+		clause, err := parseCaseOrDefault(line, funcName, closureLevel)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -196,7 +201,7 @@ func parseSelectBlock(lines []string, start int, funcName string) (ast.Stmt, int
 	return nil, 0, fmt.Errorf("対応するENDSELが見つかりません")
 }
 
-func parseCaseOrDefault(line, funcName string) (ast.Stmt, error) {
+func parseCaseOrDefault(line, funcName string, closureLevel int) (ast.Stmt, error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 {
 		return nil, fmt.Errorf("SEL内に空行は置けません")
@@ -219,11 +224,11 @@ func parseCaseOrDefault(line, funcName string) (ast.Stmt, error) {
 		if len(atoms) != 4 {
 			return nil, fmt.Errorf("CASESEND構文が不正です(書式: CASESEND single value1 label): %s", line)
 		}
-		ch, err := atomExpr(atoms[1], funcName, CatSingle)
+		ch, err := atomExpr(atoms[1], funcName, closureLevel, CatSingle)
 		if err != nil {
 			return nil, fmt.Errorf("CASESENDのチャネルが不正です: %w", err)
 		}
-		v, err := atomExpr(atoms[2], funcName, CatValue)
+		v, err := atomExpr(atoms[2], funcName, closureLevel, CatValue)
 		if err != nil {
 			return nil, fmt.Errorf("CASESENDの送信値が不正です: %w", err)
 		}
@@ -257,13 +262,13 @@ func parseCaseOrDefault(line, funcName string) (ast.Stmt, error) {
 		}
 		var lhs []ast.Expr
 		for _, d := range destAtoms {
-			e, err := atomExpr(d, funcName, CatMulti)
+			e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 			if err != nil {
 				return nil, fmt.Errorf("CASERECVの代入先が不正です: %w", err)
 			}
 			lhs = append(lhs, e)
 		}
-		ch, err := atomExpr(chAtom, funcName, CatSingle)
+		ch, err := atomExpr(chAtom, funcName, closureLevel, CatSingle)
 		if err != nil {
 			return nil, fmt.Errorf("CASERECVのチャネルが不正です: %w", err)
 		}
@@ -310,7 +315,7 @@ func parseStructBlock(lines []string, start int) (*ast.StructType, int, error) {
 		if fieldAtom.Kind != KField {
 			return nil, 0, fmt.Errorf("FIELDのフィールド名が不正です: %s", fieldAtom.Raw)
 		}
-		typExpr, err := atomExpr(typeAtom, "", CatType)
+		typExpr, err := atomExpr(typeAtom, "", 0, CatType)
 		if err != nil {
 			return nil, 0, fmt.Errorf("FIELDの型が不正です: %w", err)
 		}
@@ -330,7 +335,7 @@ func parseChType(atoms []Atom) (ast.Decl, error) {
 	if err := checkKind(atoms[0], CatDeftype); err != nil {
 		return nil, fmt.Errorf("CHTYPEの型名が不正です: %w", err)
 	}
-	elemExpr, err := atomExpr(atoms[1], "", CatType)
+	elemExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
 		return nil, fmt.Errorf("CHTYPEの要素型が不正です: %w", err)
 	}
@@ -344,7 +349,7 @@ func parseSlType(atoms []Atom) (ast.Decl, error) {
 	if err := checkKind(atoms[0], CatDeftype); err != nil {
 		return nil, fmt.Errorf("SLTYPEの型名が不正です: %w", err)
 	}
-	elemExpr, err := atomExpr(atoms[1], "", CatType)
+	elemExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
 		return nil, fmt.Errorf("SLTYPEの要素型が不正です: %w", err)
 	}
@@ -358,11 +363,11 @@ func parseMpType(atoms []Atom) (ast.Decl, error) {
 	if err := checkKind(atoms[0], CatDeftype); err != nil {
 		return nil, fmt.Errorf("MPTYPEの型名が不正です: %w", err)
 	}
-	keyExpr, err := atomExpr(atoms[1], "", CatType)
+	keyExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
 		return nil, fmt.Errorf("MPTYPEのキー型が不正です: %w", err)
 	}
-	valExpr, err := atomExpr(atoms[2], "", CatType)
+	valExpr, err := atomExpr(atoms[2], "", 0, CatType)
 	if err != nil {
 		return nil, fmt.Errorf("MPTYPEの値型が不正です: %w", err)
 	}

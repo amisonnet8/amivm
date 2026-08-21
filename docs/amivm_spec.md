@@ -34,7 +34,7 @@ Goコード
 ### 2.1 構造上の制約
 
 - `FUNC`はトップレベルのみに置ける(関数のネスト不可)
-- `FUNC`・`STTYPE`・`CLOS`・`SEL`はいずれもネスト不可
+- `FUNC`・`STTYPE`・`SEL`はネスト不可。`CLOS`のみ例外で、`CLOS`本体の中にさらに`CLOS`をネストできる。ネストの深さは`FUNC`直下を1として数え、クロージャー引数`&L-N`の階層番号`L`に対応する
 - 配列は1次元固定長のみ
 - 多次元配列はAMIVM-IR自体では表現しない。多次元配列はフロントエンド側で1次元に展開する
 
@@ -57,7 +57,7 @@ Goコード
 | 記号 | 意味 |
 |---|---|
 | `$` | 関数引数 |
-| `&` | クロージャー引数 |
+| `&` | クロージャー引数(`&N`は自分がいる`CLOS`階層のN番目、`&L-N`は階層`L`のN番目を明示的に指定) |
 | `%` | 関数内変数名 |
 | `@` | 関数外変数名 |
 | `^` | 型名 |
@@ -214,33 +214,32 @@ Goコード
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `FNTYPE deftype type1 type2 ... : type3 type4 ...` | `type deftype func(type1, type2 ...) (type3, type4 ...)` | 関数外 |
-| `CLOS shallow type1 type2 ... : type3 type4 ...` | `shallow = func(amivm_closure_param1 type1, amivm_closure_param2 type2 ...) (type3, type4 ...) {` | |
+| `CLOS single1 type1 type2 ... : type3 type4 ...` | `single1 = func(amivm_closureL_param1 type1, amivm_closureL_param2 type2 ...) (type3, type4 ...) {` | `L`はこの`CLOS`のネスト深さ(`FUNC`直下が1、ネストするごとに+1) |
 | `ENDCLOS` | `}` | `CLOS`終端 |
 
 ## 5. オペランドカテゴリ
 
 | カテゴリ | 説明 | 許容形式 |
 |---|---|---|
-| `whole` | 0以上の整数(whole number) | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` |
+| `whole` | 0以上の整数(whole number) | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` |
 | `integer1 integer2` | 整数 | `whole`の形式 + `-1234` |
 | `number1 number2` | 数値 | `integer`の形式 + `123.4`,`1.23e4` |
-| `boolean1 boolean2` | 真偽値 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` |
-| `from to` | スライス切り出しの範囲指定 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `_`(省略を表す) |
-| `slice1 slice2` | スライス・文字列 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `"ABC"` |
-| `ordered1 ordered2` | 順序比較可能な値 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` |
-| `value1 value2` | 値全般 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` / `nil` / `!xxx_123` / `?xxx_123` / `?xxx_123.xxx_123` |
-| `variable` | 変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` |
+| `boolean1 boolean2` | 真偽値 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` |
+| `from to` | スライス切り出しの範囲指定 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `_`(省略を表す) |
+| `slice1 slice2` | スライス・文字列 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `"ABC"` |
+| `ordered1 ordered2` | 順序比較可能な値 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` |
+| `value1 value2` | 値全般 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` / `nil` / `!xxx_123` / `?xxx_123` / `?xxx_123.xxx_123` |
+| `variable` | 変数 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` |
 | `local` | `VAR`変数名 | `%xxx_123` |
 | `global` | `GVAR`変数名 | `@xxx_123` |
-| `shallow` | 関数レベル以上の変数 | `$N` / `%xxx_123` / `@xxx_123` |
-| `single1 single2` | 単一左辺・チャネル変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` |
-| `multi1 multi2` | 複数左辺 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `_` |
+| `single1 single2` | 単一左辺・チャネル変数 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` |
+| `multi1 multi2` | 複数左辺 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `_` |
 | `field` | 構造体フィールド名 | `>xxx_123` |
-| `point` | `ADDR`でフィールド/添字を指定する対象 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `>xxx_123` |
+| `point` | `ADDR`でフィールド/添字を指定する対象 | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `>xxx_123` |
 | `type1 type2 type3 type4` | 型 | `^xxx_123` / `^xxx_123.xxx_123` / `^*xxx_123` / `^*xxx_123.xxx_123` / `^[n]xxx_123` / `^[n]xxx_123.xxx_123` / `^[n]*xxx_123` / `^[n]*xxx_123.xxx_123` |
 | `deftype` | 定義型 | `^xxx_123` |
 | `defname` | 定義関数名 | `!xxx_123` / `!main` |
-| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` / `@xxx_123` / `$N` / `&N` |
+| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` / `@xxx_123` / `$N` / `&N` / `&L-N` |
 | `label` | ラベル名 | `#xxx_123` |
 
 ## 6. トークンの形状分類(Kind)
@@ -257,7 +256,8 @@ Goコード
 | `_` | `from`・`to`の場合は空白、`multiN`の場合は`_` |
 | `:` | Goコードには出てこない(関数系命令のデリミタ) |
 | `$N` | `amivm_function_paramN` |
-| `&N` | `amivm_closure_paramN` |
+| `&N` | `amivm_closureL_paramN`(`L`は自分がいる`CLOS`のネスト深さ) |
+| `&L-N` | `amivm_closureL_paramN`(`L`を明示的に指定) |
 | `%xxx_123` | `関数名_amivm_function_xxx_123` |
 | `@xxx_123` | `xxx_123` |
 | `@xxx_123.xxx_123` | `xxx_123.xxx_123` |

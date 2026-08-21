@@ -76,7 +76,8 @@ var (
 	reRuneLit   = regexp.MustCompile(`^'.'$`) // 簡略化: 1バイト文字のみ想定
 	reStringLit = regexp.MustCompile(`^"[^"]*"$`)
 
-	reNumOnly = regexp.MustCompile(`^(\d+)$`)
+	reNumOnly         = regexp.MustCompile(`^(\d+)$`)
+	reClosureParamLvl = regexp.MustCompile(`^(\d+)-(\d+)$`)
 
 	reIdentOnly = regexp.MustCompile(`^(\w+)$`)
 	reIdentSel  = regexp.MustCompile(`^(\w+)\.(\w+)$`)
@@ -158,7 +159,13 @@ func classifyParam(raw, body string) Atom {
 	return Atom{Kind: KInvalid, Raw: raw}
 }
 
+// classifyClosureParam は &N(自分がいるCLOS階層のN番目)と &L-N(階層Lを明示)の
+// 両方を受け付ける。どちらもKClosureParamで、Aにパラメータ番号(N)、Bに明示された
+// 階層(L。&Nの場合は空文字列で「現在の階層」を意味する)を入れる。
 func classifyClosureParam(raw, body string) Atom {
+	if m := reClosureParamLvl.FindStringSubmatch(body); m != nil {
+		return Atom{Kind: KClosureParam, Raw: raw, A: m[2], B: m[1]}
+	}
 	if m := reNumOnly.FindStringSubmatch(body); m != nil {
 		return Atom{Kind: KClosureParam, Raw: raw, A: m[1]}
 	}

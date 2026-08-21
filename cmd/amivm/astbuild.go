@@ -29,9 +29,10 @@ func amivmLocalGoName(funcName, varName string) string {
 }
 
 // closureParamGoName はクロージャー引数のGo側の実名。関数名による修飾はしない
-// (& N → amivm_closure_paramN で常に固定。func literalごとに別スコープになるため衝突しない)。
-func closureParamGoName(n int) string {
-	return fmt.Sprintf("amivm_closure_param%d", n)
+// (&L-N → amivm_closureL_paramN。Lはこのクロージャーのネスト深さで、func literalごとに
+// 別スコープになるため関数名を含めなくても衝突しない)。
+func closureParamGoName(level, n int) string {
+	return fmt.Sprintf("amivm_closure%d_param%d", level, n)
 }
 
 func paramBaseExpr(funcName, numStr string) (ast.Expr, error) {
@@ -42,9 +43,15 @@ func paramBaseExpr(funcName, numStr string) (ast.Expr, error) {
 	return ast.NewIdent(amivmParamGoName(funcName, n)), nil
 }
 
-func closureParamBaseExpr(numStr string) ast.Expr {
-	n, _ := strconv.Atoi(numStr)
-	return ast.NewIdent(closureParamGoName(n))
+// closureParamBaseExpr は &N(自分がいるCLOS階層のN番目)/&L-N(階層Lを明示)を解決する。
+// aのBが空なら現在の階層(closureLevel)、そうでなければBをパースした値を階層として使う。
+func closureParamBaseExpr(a Atom, closureLevel int) ast.Expr {
+	n, _ := strconv.Atoi(a.A)
+	level := closureLevel
+	if a.B != "" {
+		level, _ = strconv.Atoi(a.B)
+	}
+	return ast.NewIdent(closureParamGoName(level, n))
 }
 
 func localBaseExpr(funcName, name string) (ast.Expr, error) {
@@ -77,7 +84,7 @@ func chanTypeExpr(elt ast.Expr) ast.Expr {
 	return &ast.ChanType{Dir: ast.SEND | ast.RECV, Value: elt}
 }
 
-func atomToExpr(a Atom, funcName string) (ast.Expr, error) {
+func atomToExpr(a Atom, funcName string, closureLevel int) (ast.Expr, error) {
 	switch a.Kind {
 	case KBlank:
 		return ast.NewIdent("_"), nil
@@ -95,7 +102,7 @@ func atomToExpr(a Atom, funcName string) (ast.Expr, error) {
 	case KParam:
 		return paramBaseExpr(funcName, a.A)
 	case KClosureParam:
-		return closureParamBaseExpr(a.A), nil
+		return closureParamBaseExpr(a, closureLevel), nil
 	case KLocal:
 		return localBaseExpr(funcName, a.A)
 	case KGlobal:
