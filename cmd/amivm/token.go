@@ -69,12 +69,22 @@ type Atom struct {
 // =====================================================================
 
 var (
-	reZero      = regexp.MustCompile(`^0$`)
-	rePosInt    = regexp.MustCompile(`^[1-9]\d*$`)
-	reNegInt    = regexp.MustCompile(`^-\d+$`)
-	reFloatLit  = regexp.MustCompile(`^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$`)
-	reRuneLit   = regexp.MustCompile(`^'.'$`) // 簡略化: 1バイト文字のみ想定
-	reStringLit = regexp.MustCompile(`^"[^"]*"$`)
+	reZero     = regexp.MustCompile(`^0$`)
+	rePosInt   = regexp.MustCompile(`^[1-9]\d*$`)
+	reNegInt   = regexp.MustCompile(`^-\d+$`)
+	reFloatLit = regexp.MustCompile(`^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$`)
+	// reRuneLit: 1文字そのまま(Unicode 1文字。Goのregexpはデフォルトでルーン単位に
+	// マッチするため、非ASCII文字も1文字として扱える)、またはGoの名前付きエスケープ
+	// (\a \b \f \n \r \t \v \\ \' \")、\uXXXX(コードポイント。4桁hex)、
+	// \UXXXXXXXX(コードポイント。8桁hex)のいずれかを許容する。\xHH(2桁hexバイト値)・
+	// 8進数バイト値エスケープ(\nnn)は、\U/\uでコードポイントを直接指定できるため
+	// 意図的に非対応とする。
+	reRuneLit = regexp.MustCompile(`^'(?:[^'\\]|\\[abfnrtv\\'"]|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})'$`)
+	// reStringLit: ダブルクォート文字列。エスケープシーケンス(\"を含む)を正しく
+	// 扱うため、「エスケープされていない"以外の文字」または「\に続く任意の1文字」の
+	// 繰り返しとして定義する(個々のエスケープの妥当性はgo/typesの再パースに委ねる。
+	// 意味の正しさの検証はAMIVM側で持たない設計方針どおり)。
+	reStringLit = regexp.MustCompile(`^"(?:[^"\\]|\\.)*"$`)
 
 	reNumOnly         = regexp.MustCompile(`^(\d+)$`)
 	reClosureParamLvl = regexp.MustCompile(`^(\d+)-(\d+)$`)
