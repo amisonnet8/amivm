@@ -117,7 +117,7 @@ Hello, AMIVM!
 - **チャネル・`select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **スライス**: `SLTYPE`, `SLMAKE`, `SLICE`
 - **構造体**: `STTYPE`/`ENDSTTYPE`, `FIELD`, `FSET`, `FGET`
-- **map**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`
+- **map**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`, `MPKEYS`
 - **クロージャー**: `FNTYPE`, `CLOS`/`ENDCLOS`
 
 メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。

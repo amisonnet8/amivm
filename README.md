@@ -117,7 +117,7 @@ Instructions are grouped roughly into:
 - **Channels & `select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **Slices**: `SLTYPE`, `SLMAKE`, `SLICE`
 - **Structs**: `STTYPE`/`ENDSTTYPE`, `FIELD`, `FSET`, `FGET`
-- **Maps**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`
+- **Maps**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`, `MPKEYS`
 - **Closures**: `FNTYPE`, `CLOS`/`ENDCLOS`
 
 Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value.

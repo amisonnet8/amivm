@@ -43,7 +43,7 @@
 | `AGET single variable whole` | `single = variable[whole]` |
 | `PSET single value1` | `*single = value1` |
 | `PGET single variable` | `single = *variable` |
-| `ADDR single variable` | `single = &variable` |
+| `ADDR single variable (point)` | `point`無し: `single = &variable` / `point`が`>xxx`: `single = &variable.point` / それ以外: `single = &variable[point]` |
 | `ADD single number1 number2` | `single = number1 + number2` |
 | `SUB single number1 number2` | `single = number1 - number2` |
 | `MUL single number1 number2` | `single = number1 * number2` |
@@ -96,11 +96,16 @@
 | `MPMAKE single deftype` | `single = make(deftype)` |
 | `MSET single value1 value2` | `single[value1] = value2` |
 | `MGET multi1 (multi2) single value1` | `multi1(, multi2) = single[value1]` |
+| `MPKEYS single1 single2` | `single1 = slices.Collect(maps.Keys(single2))` |
 | `FNTYPE deftype type1 type2 ... : type3 type4 ...` | `type deftype func(type1, type2 ...) (type3, type4 ...)`(関数外) |
 | `CLOS local type1 type2 ... : type3 type4 ...` | `local = func(&1 type1, &2 type2 ...) (type3, type4 ...) {` |
 | `ENDCLOS` | `}`(`CLOS`終端) |
 
 `ADD`は数値演算専用(常に2オペランド)。文字列連結は`CONCAT`(可変長引数)で行う。キャスト(型変換)・組み込み関数(`close`/`len`/`cap`等)は専用命令を持たず、`CALL`に統合している(9節参照)。
+
+`ADDR`の`point`は省略可能な第3引数で、`&variable`単体だけでなく`&variable.field`(構造体フィールドのアドレス)・`&variable[index]`(スライス/配列要素のアドレス)も表現できる。`point`が`>xxx`(フィールド名)かそれ以外かで生成先が分岐する。`&variable[point]`はスライス/配列専用で、`variable`がmapの場合は文法上は通っても`go/types`が「mapの要素はアドレス取得できない」というエラーを返す(AMIVM側では検証しない。9節の設計方針どおり)。
+
+`MPKEYS`はmapを走査する手段が無い(AMIVM-IRに`for range`に相当する命令が無く、mapのキー一覧を得る手段がGoの`for k := range m`しか無い)という不備を解消するために追加した。`slices.Collect(maps.Keys(m))`というGo 1.23+の標準ライブラリの組み合わせに展開され、importはgoimportsが自動解決する(`slices`/`maps`とも標準ライブラリなので、`-i`/`--import`オプションは不要)。
 
 ### `:`(コロン)区切り
 
@@ -150,18 +155,19 @@
 | `type1 type2 type3 type4` | 型表現(7節) | `^xxx`系8パターン |
 | `deftype` | `TYPE`系命令で宣言・参照する定義型名 | `^xxx`(単純形のみ) |
 | `whole` | 0以上の整数(添字・シフト量・サイズ等) | フル系識別子 + `0`,`1234` / `'A'` |
+| `point` | `ADDR`の第3引数(フィールド/添字の対象) | `whole`の形式 + `>xxx` |
 | `from to` | `SLICE`の範囲指定 | `whole`の形式 + `_`(省略。Go側では空欄になる) |
 | `integer1 integer2` | 整数オペランド | `whole`の形式 + `-1234` |
 | `number1 number2` | 数値オペランド | `integer`の形式 + `123.4`,`1.23e4` |
 | `boolean1 boolean2` | 真偽値オペランド | フル系識別子 + `true`,`false` |
 | `slice1 slice2` | スライス・文字列(`CONCAT`/`SLICE`の対象) | フル系識別子 + `"ABC"` |
 | `ordered1 ordered2` | 順序比較可能な値 | フル系識別子 + `0`,`1234`,`-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` |
-| `value1 value2` | 値全般(最も緩い) | `ordered`の形式 + `true`,`false` / `nil` |
+| `value1 value2` | 値全般(最も緩い) | `ordered`の形式 + `true`,`false` / `nil` / `!xxx` / `?xxx` / `?xxx.yyy`(関数そのものを、呼び出さずに値として渡す) |
 | `defname` | AMIVM内で定義する関数名 | `!xxx` / `!main` |
-| `callname` | 呼び出し対象 | `!xxx` / `!main` / `?xxx` / `?xxx.yyy` / `%xxx`(関数値・メソッド値・クロージャーを保持するローカル変数) |
+| `callname` | 呼び出し対象 | `!xxx` / `!main` / `?xxx` / `?xxx.yyy` / `%xxx`(関数値・メソッド値・クロージャーを保持するローカル変数) / `$N` / `&N`(パラメータ・クロージャー引数として受け取った関数値をそのまま呼び出す) |
 | `label` | ラベル名 | `#xxx` |
 
-`local`/`global`(宣言名)・`single`・`deftype`は他のカテゴリより狭く、対応するプレフィックス1種類のみを許容する。`callname`に`%xxx`が含まれるのは、構造体のメソッド値やクロージャーを保持したローカル変数をそのまま呼び出せるようにするため(8節参照)。
+`local`/`global`(宣言名)・`single`・`deftype`は他のカテゴリより狭く、対応するプレフィックス1種類のみを許容する。`callname`に`%xxx`が含まれるのは、構造体のメソッド値やクロージャーを保持したローカル変数をそのまま呼び出せるようにするため(8節参照)。`$N`/`&N`も同じ理由で含まれている。クロージャーをパラメータ(`$N`)やクロージャー引数(`&N`)として受け取った側でそのまま呼び出したいケースに対応するためで、以前はこれが抜けており「クロージャーを引数で渡してもそのまま呼び出せない」という仕様上の不備だった。
 
 ## 6. コンテナ型はいずれも`TYPE`系命令による事前宣言が必須
 
@@ -325,6 +331,17 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 これを`golang.org/x/tools/go/packages`(`go list`を使う、モジュールを正しく理解するパッケージローダー)ベースの`typeCheck`関数に置き換えることで、標準ライブラリ以外のパッケージへの参照(同一package内の他ファイル・同一モジュール内の別package・モジュールの依存として正しく導入された別モジュールのパッケージ、いずれも)を解決できるようにした。ただしこの仕組みが機能するのは出力先ディレクトリがGoモジュール(`go.mod`が存在する)である場合に限られる(`go build`自身がそうであるように、モジュール外では単一ファイルだけの`command-line-arguments`パッケージとして扱われるため)。
 
 さらに、`imports.Process`(goimports)が`?xxrt.Helper`のような裸の識別子から正しいimportパスを自動推測する部分は、上記の型チェックの改善とは独立した別の問題として残っていることが分かった。標準ライブラリや既に参照済みのパッケージは高確率で解決できるが、まだどこからも参照されていない新規パッケージに対しては、importの挿入自体に失敗する、あるいは誤ったパスを挿入することがある(実在の`github.com/google/uuid`パッケージでも、裸の`uuid.New()`という参照だけからは`import "uuid"`という誤ったパスが挿入される事例を確認した)。この推測の不確実性を完全に回避するため、`-i`/`--import <名前>=<importパス>`オプションを追加した。指定したマッピングは常にエイリアス付きの明示的な`import`文として生成コードの先頭に追加してからgoimportsに渡すため、goimportsは「既にある正しいimportを保つ・使われていなければ消す」という通常の未使用import除去の仕組みで処理するだけになり、推測が一切不要になる。
+
+### 実際に言語実装を書いてみて見つかった4つの仕様不備の修正
+
+amivm-IRを使って2つの言語実装を書いてみたところ、次の4つの不備が見つかった(回避策はあったが、いずれも本来amivm側で解消すべきもの)。
+
+1. **`ADDR`が単純な`&variable`しか表現できなかった**。`&p.x`(構造体フィールドのアドレス)や`&xs[0]`(スライス/配列要素のアドレス)を、既存命令の組み合わせでは取得できなかった。`ADDR single variable (point)`という形に拡張し、`point`の有無・種類(`>xxx`かそれ以外か)で`single = &variable` / `&variable.point` / `&variable[point]`に分岐するようにした。`point`という新カテゴリは`whole`(0以上の整数)に`>xxx`(フィールド名)を加えただけで、新しいKindの追加は不要だった
+2. **`callname`にクロージャー引数(`&N`)・パラメータ(`$N`)が含まれていなかった**。パラメータとしてクロージャーを受け取った関数の中で、そのクロージャーをそのまま呼び出せない(`CALL : $1 ...`ができない)という、完全な仕様ミスだった。`callname`に`$N`/`&N`を追加して解消した
+3. **mapを走査する手段が無かった**。AMIVM-IRには`for range`に相当する命令が無く、mapの全キーを列挙する方法が用意されていなかった。`MPKEYS single1 single2`(`single1 = slices.Collect(maps.Keys(single2))`)を新設して解消した
+4. **`value`に「関数そのもの」を渡す手段が無かった**。関数を呼び出す(`CALL`)ことはできても、関数を値として(呼び出さずに)変数や引数に渡すことができなかった。`value1 value2`カテゴリに`!xxx`/`?xxx`/`?xxx.yyy`を追加して解消した
+
+いずれも、既存のKind体系・命令セットの枠組みの中で「カテゴリの許容範囲を広げる」「命令に省略可能な引数を1つ足す」「命令を1つ足す」という形で解決でき、Kindの新設や既存命令の破壊的変更は不要だった。
 
 ### `LABEL`を常に`label: ;`にする変更
 

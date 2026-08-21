@@ -105,7 +105,7 @@ func parseSingleLine(line, funcName string) (ast.Stmt, error) {
 }
 ```
 
-ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`IF`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
+ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`IF`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`/`MPKEYS`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
 
 ## 3. トークンの分類体系(Kind)
 
@@ -241,6 +241,7 @@ const (
     CatType
     CatDeftype
     CatField
+    CatPoint
     CatWhole
     CatFromTo
     CatInt

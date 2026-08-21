@@ -1,10 +1,12 @@
-// map(MPTYPE/MPMAKE/MSET/MGET)のテスト
+// map(MPTYPE/MPMAKE/MSET/MGET/MPKEYS)のテスト
 MPTYPE	^StrIntMap	^string	^int
+SLTYPE	^StrSlice	^string
 
 FUNC	!main	:
 	VAR	%m	^StrIntMap
 	VAR	%v	^int
 	VAR	%ok	^bool
+	VAR	%keys	^StrSlice
 
 	MPMAKE	%m	^StrIntMap
 	MSET	%m	"one"	1
@@ -12,6 +14,8 @@ FUNC	!main	:
 
 	MGET	%v	%m	"one"
 	MGET	%v	%ok	%m	"three"
+
+	MPKEYS	%keys	%m
 
 	RET
 ENDFUNC

@@ -1,6 +1,21 @@
-// クロージャー(CLOS/ENDCLOS)のテスト
+// クロージャー(CLOS/ENDCLOS)のテスト。callname/valueへの関数拡張のテストも含む
 FNTYPE	^BinOp	^int	^int	:	^int
 FNTYPE	^Provider	:	^int
+FNTYPE	^IntOp	^int	:	^int
+
+FUNC	!triple	^int	:	^int
+	VAR	%r	^int
+	MUL	%r	$1	3
+	RET	%r
+ENDFUNC
+
+// パラメータで受け取った関数値(クロージャー等)を、その関数の中で$1のまま
+// callnameとして直接呼び出せることのテスト
+FUNC	!applyBinOp	^BinOp	^int	^int	:	^int
+	VAR	%r	^int
+	CALL	%r	:	$1	$2	$3
+	RET	%r
+ENDFUNC
 
 FUNC	!main	:
 	VAR	%base	^int
@@ -10,6 +25,9 @@ FUNC	!main	:
 	VAR	%result	^int
 	VAR	%c1	^int
 	VAR	%c2	^int
+	VAR	%viaParam	^int
+	VAR	%fn	^IntOp
+	VAR	%viaValue	^int
 
 	SET	%base	100
 	SET	%count	0
@@ -30,6 +48,13 @@ FUNC	!main	:
 
 	CALL	%c1	:	%counter
 	CALL	%c2	:	%counter
+
+	// %adderをパラメータとして渡し、呼び出し先で$1のまま呼び出す(callname拡張)
+	CALL	%viaParam	:	!applyBinOp	%adder	5	6
+
+	// AMIVM内定義関数そのものを値として変数に代入し、後から呼び出す(value拡張)
+	SET	%fn	!triple
+	CALL	%viaValue	:	%fn	7
 
 	RET
 ENDFUNC

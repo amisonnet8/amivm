@@ -1,13 +1,31 @@
-// ポインタ(ADDR/PGET/PSET)のテスト
+// ポインタ(ADDR/PGET/PSET)のテスト。ADDRはpoint省略・フィールド・添字の3パターン
+STTYPE	^Point
+FIELD	>X	^int
+ENDSTTYPE
+
 FUNC	!main	:
 	VAR	%v	^int
 	VAR	%p	^*int
 	VAR	%copy	^int
+	VAR	%arr	^[3]int
+	VAR	%pe	^*int
+	VAR	%pt	^Point
+	VAR	%pf	^*int
 
 	SET	%v	100
 	ADDR	%p	%v
 	PGET	%copy	%p
 	PSET	%p	200
+
+	ASET	%arr	0	10
+	ADDR	%pe	%arr	0
+	PGET	%copy	%pe
+	PSET	%pe	11
+
+	FSET	%pt	>X	5
+	ADDR	%pf	%pt	>X
+	PGET	%copy	%pf
+	PSET	%pf	6
 
 	RET
 ENDFUNC

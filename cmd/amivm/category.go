@@ -20,6 +20,7 @@ const (
 	CatType
 	CatDeftype
 	CatField
+	CatPoint
 	CatWhole
 	CatFromTo
 	CatInt
@@ -37,7 +38,7 @@ var categoryLabel = map[Category]string{
 	CatVa: "VAR変数名", CatGv: "GVAR変数名",
 	CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
 	CatVariable: "変数参照", CatType: "型", CatDeftype: "定義型",
-	CatField: "構造体フィールド名",
+	CatField: "構造体フィールド名", CatPoint: "ADDRのフィールド/添字対象",
 	CatWhole: "0以上の整数", CatFromTo: "スライス範囲(from/to)",
 	CatInt: "整数", CatNumber: "数値", CatBool: "真偽値",
 	CatSlice: "スライス/文字列", CatOrder: "順序比較値", CatValue: "値",
@@ -93,6 +94,8 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	whole := mergeKinds(identRefFull, kindSet(KZero, KPosInt, KRune))
 	m[CatWhole] = whole
 	m[CatFromTo] = mergeKinds(whole, kindSet(KBlank))
+	// point: ADDRの第3引数(フィールド/添字の対象)。wholeの許容形式に構造体フィールド名を加えたもの。
+	m[CatPoint] = mergeKinds(whole, kindSet(KField))
 
 	integer := mergeKinds(whole, kindSet(KNegInt))
 	m[CatInt] = integer
@@ -109,11 +112,16 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	order := mergeKinds(identRefFull, kindSet(KZero, KPosInt, KNegInt, KFloat, KRune, KString))
 	m[CatOrder] = order
 
-	value := mergeKinds(order, kindSet(KBool, KNil))
+	// value: 値全般。KAmivmFunc/KGoFunc/KGoFuncSelを含めることで、関数そのものを
+	// (呼び出さずに)値として引数等に渡せる。KAmivmMainは含めない(mainを値として渡す
+	// ケースは無い)。
+	value := mergeKinds(order, kindSet(KBool, KNil, KAmivmFunc, KGoFunc, KGoFuncSel))
 	m[CatValue] = value
 
 	m[CatDefname] = kindSet(KAmivmFunc, KAmivmMain)
-	m[CatCallname] = kindSet(KAmivmFunc, KAmivmMain, KGoFunc, KGoFuncSel, KLocal)
+	// callname: 呼び出し対象。KParam/KClosureParamを含めることで、パラメータ・
+	// クロージャー引数として受け取った関数値(クロージャー等)をそのまま呼び出せる。
+	m[CatCallname] = kindSet(KAmivmFunc, KAmivmMain, KGoFunc, KGoFuncSel, KLocal, KParam, KClosureParam)
 	m[CatLabel] = kindSet(KLabel)
 
 	return m

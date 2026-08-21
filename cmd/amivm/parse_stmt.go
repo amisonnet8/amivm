@@ -111,6 +111,8 @@ func parseSingleLine(line, funcName string) (ast.Stmt, error) {
 		return parseMset(rest, funcName)
 	case "MGET":
 		return parseMget(rest, funcName)
+	case "MPKEYS":
+		return parseMpKeys(rest, funcName)
 	default:
 		return nil, fmt.Errorf("未知の命令です: %s", line)
 	}
@@ -255,9 +257,14 @@ func parsePget(atoms []Atom, funcName string) (ast.Stmt, error) {
 	}, nil
 }
 
+// parseAddr は「ADDR single variable (point)」を解釈する。pointは省略可能。
+// pointが無ければ single = &variable、pointが>xxx_123(構造体フィールド)なら
+// single = &variable.point、それ以外(添字)なら single = &variable[point] を生成する。
+// &variable[point]はスライス/配列専用で、mapに使うとgo/types側でエラーになる
+// (AMIVM側では検証しない。意味の正しさをgo/typesに委ねる設計方針どおり)。
 func parseAddr(atoms []Atom, funcName string) (ast.Stmt, error) {
-	if err := expectArgs("ADDR", atoms, 2); err != nil {
-		return nil, err
+	if len(atoms) < 2 || len(atoms) > 3 {
+		return nil, fmt.Errorf("ADDR構文が不正です(書式: ADDR single variable (point)): %s", joinRaw(atoms))
 	}
 	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
 	if err != nil {
@@ -267,9 +274,27 @@ func parseAddr(atoms []Atom, funcName string) (ast.Stmt, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ADDRの対象が不正です: %w", err)
 	}
+
+	var target ast.Expr = variable
+	if len(atoms) == 3 {
+		pointAtom := atoms[2]
+		if err := checkKind(pointAtom, CatPoint); err != nil {
+			return nil, fmt.Errorf("ADDRのpointが不正です: %w", err)
+		}
+		if pointAtom.Kind == KField {
+			target = &ast.SelectorExpr{X: variable, Sel: ast.NewIdent(pointAtom.A)}
+		} else {
+			point, err := atomToExpr(pointAtom, funcName)
+			if err != nil {
+				return nil, fmt.Errorf("ADDRのpointが不正です: %w", err)
+			}
+			target = &ast.IndexExpr{X: variable, Index: point}
+		}
+	}
+
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
-		Rhs: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: variable}},
+		Rhs: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: target}},
 	}, nil
 }
 
@@ -699,5 +724,34 @@ func parseMget(atoms []Atom, funcName string) (ast.Stmt, error) {
 	return &ast.AssignStmt{
 		Lhs: lhs, Tok: token.ASSIGN,
 		Rhs: []ast.Expr{&ast.IndexExpr{X: m, Index: key}},
+	}, nil
+}
+
+// parseMpKeys は「MPKEYS single1 single2」を解釈する。mapを走査する手段が無いため、
+// single1 = slices.Collect(maps.Keys(single2)) というGoコードを生成する
+// (slices/maps標準パッケージ。importはgoimportsが自動解決する)。
+func parseMpKeys(atoms []Atom, funcName string) (ast.Stmt, error) {
+	if err := expectArgs("MPKEYS", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("MPKEYSの代入先が不正です: %w", err)
+	}
+	m, err := atomExpr(atoms[1], funcName, CatSingle)
+	if err != nil {
+		return nil, fmt.Errorf("MPKEYSのmapが不正です: %w", err)
+	}
+	keysCall := &ast.CallExpr{
+		Fun:  &ast.SelectorExpr{X: ast.NewIdent("maps"), Sel: ast.NewIdent("Keys")},
+		Args: []ast.Expr{m},
+	}
+	collectCall := &ast.CallExpr{
+		Fun:  &ast.SelectorExpr{X: ast.NewIdent("slices"), Sel: ast.NewIdent("Collect")},
+		Args: []ast.Expr{keysCall},
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{collectCall},
 	}, nil
 }

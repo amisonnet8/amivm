@@ -77,14 +77,14 @@ Goコード
 
 ### 4.2 代入・ポインタ・配列アクセス
 
-| 命令 | 生成されるGoコード |
-|---|---|
-| `SET single value1` | `single = value1` |
-| `ASET single whole value1` | `single[whole] = value1` |
-| `AGET single variable whole` | `single = variable[whole]` |
-| `PSET single value1` | `*single = value1` |
-| `PGET single variable` | `single = *variable` |
-| `ADDR single variable` | `single = &variable` |
+| 命令 | 生成されるGoコード | 備考 |
+|---|---|---|
+| `SET single value1` | `single = value1` | |
+| `ASET single whole value1` | `single[whole] = value1` | |
+| `AGET single variable whole` | `single = variable[whole]` | |
+| `PSET single value1` | `*single = value1` | |
+| `PGET single variable` | `single = *variable` | |
+| `ADDR single variable (point)` | `point`無し: `single = &variable` / `point`が`>xxx_123`: `single = &variable.point` / `point`が`>xxx_123`ではない: `single = &variable[point]` | `&variable[point]`はスライス/配列専用。mapに使うとgo/typesエラーになる(想定通りの挙動) |
 
 ### 4.3 算術演算
 
@@ -207,6 +207,7 @@ Goコード
 | `MPMAKE single deftype` | `single = make(deftype)` | |
 | `MSET single value1 value2` | `single[value1] = value2` | |
 | `MGET multi1 (multi2) single value1` | `multi1(, multi2) = single[value1]` | |
+| `MPKEYS single1 single2` | `single1 = slices.Collect(maps.Keys(single2))` | `slices`/`maps`パッケージ(Go標準ライブラリ)を利用。mapを走査する手段として使う |
 
 ### 4.17 クロージャー・関数型
 
@@ -227,17 +228,18 @@ Goコード
 | `from to` | スライス切り出しの範囲指定 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `_`(省略を表す) |
 | `slice1 slice2` | スライス・文字列 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `"ABC"` |
 | `ordered1 ordered2` | 順序比較可能な値 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` |
-| `value1 value2` | 値全般 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` / `nil` |
+| `value1 value2` | 値全般 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `true`,`false` / `0`,`1234` / `-1234` / `123.4`,`1.23e4` / `"ABC"` / `'A'` / `nil` / `!xxx_123` / `?xxx_123` / `?xxx_123.xxx_123` |
 | `variable` | 変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` |
 | `local` | `VAR`変数名 | `%xxx_123` |
 | `global` | `GVAR`変数名 | `@xxx_123` |
 | `single` | 単一左辺・チャネル変数 | `$N` / `&N` / `%xxx_123` / `@xxx_123` |
 | `multi1 multi2` | 複数左辺 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `_` |
 | `field` | 構造体フィールド名 | `>xxx_123` |
+| `point` | `ADDR`でフィールド/添字を指定する対象 | `$N` / `&N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` / `>xxx_123` |
 | `type1 type2 type3 type4` | 型 | `^xxx_123` / `^xxx_123.xxx_123` / `^*xxx_123` / `^*xxx_123.xxx_123` / `^[n]xxx_123` / `^[n]xxx_123.xxx_123` / `^[n]*xxx_123` / `^[n]*xxx_123.xxx_123` |
 | `deftype` | 定義型 | `^xxx_123` |
 | `defname` | 定義関数名 | `!xxx_123` / `!main` |
-| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` |
+| `callname` | 呼び出し関数名 | `!xxx_123` / `!main` / `?xxx_123` / `?xxx_123.xxx_123` / `%xxx_123` / `$N` / `&N` |
 | `label` | ラベル名 | `#xxx_123` |
 
 ## 6. トークンの形状分類(Kind)
