@@ -1,0 +1,97 @@
+// IF/ELIF/ELSE/ENDIF(ブロック形の条件分岐)とLOOP/BREAK/CONTINUE/ENDLOOP(ループ)の
+// テスト。IF・LOOPそれぞれのネスト(LOOP内のIF、IF内のIF、LOOP内のLOOP)も含む
+
+FUNC	!classify	^int	:	^string
+	VAR	%r	^string
+	VAR	%isNeg	^bool
+	VAR	%isZero	^bool
+	LT	%isNeg	$1	0
+	EQ	%isZero	$1	0
+	IF	%isNeg
+		SET	%r	"negative"
+	ELIF	%isZero
+		SET	%r	"zero"
+	ELSE
+		SET	%r	"positive"
+	ENDIF
+	RET	%r
+ENDFUNC
+
+// LOOP内でIF+BREAK(終了条件)・IF+CONTINUE(奇数をスキップ)を使い、
+// 0以上$1未満の偶数の総和を求める
+FUNC	!sumEven	^int	:	^int
+	VAR	%sum	^int
+	VAR	%i	^int
+	VAR	%done	^bool
+	VAR	%mod	^int
+	VAR	%isOdd	^bool
+
+	SET	%sum	0
+	SET	%i	0
+	LOOP
+		GTE	%done	%i	$1
+		IF	%done
+			BREAK
+		ENDIF
+
+		MOD	%mod	%i	2
+		NEQ	%isOdd	%mod	0
+		IF	%isOdd
+			ADD	%i	%i	1
+			CONTINUE
+		ENDIF
+
+		ADD	%sum	%sum	%i
+		ADD	%i	%i	1
+	ENDLOOP
+	RET	%sum
+ENDFUNC
+
+// LOOPのネスト(LOOP内のLOOP)のテスト。内側のBREAKは内側のLOOPだけを抜ける
+FUNC	!nestedLoopCount	:	^int
+	VAR	%count	^int
+	VAR	%i	^int
+	VAR	%j	^int
+	VAR	%doneI	^bool
+	VAR	%doneJ	^bool
+
+	SET	%count	0
+	SET	%i	0
+	LOOP
+		GTE	%doneI	%i	3
+		IF	%doneI
+			BREAK
+		ENDIF
+
+		SET	%j	0
+		LOOP
+			GTE	%doneJ	%j	3
+			IF	%doneJ
+				BREAK
+			ENDIF
+			ADD	%count	%count	1
+			ADD	%j	%j	1
+		ENDLOOP
+
+		ADD	%i	%i	1
+	ENDLOOP
+	RET	%count
+ENDFUNC
+
+FUNC	!main	:
+	VAR	%c1	^string
+	VAR	%c2	^string
+	VAR	%c3	^string
+	VAR	%sum	^int
+	VAR	%count	^int
+
+	CALL	%c1	:	!classify	-5
+	CALL	%c2	:	!classify	0
+	CALL	%c3	:	!classify	5
+
+	CALL	%sum	:	!sumEven	10
+
+	CALL	%count	:	!nestedLoopCount
+
+	RET
+ENDFUNC

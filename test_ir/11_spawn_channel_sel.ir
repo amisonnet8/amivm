@@ -1,4 +1,5 @@
-// SPAWN・チャネル・SELのテスト
+// SPAWN・チャネル・SELのテスト。CASESEND/CASERECV/DEFAULTがブロック本体を
+// 持つ新仕様(labelを取らず、次のケースかENDSELまでが本体)のテストを兼ねる
 CHTYPE	^IntChan	^int
 
 FUNC	!worker	^IntChan	:
@@ -21,32 +22,18 @@ FUNC	!main	:
 	CHRECV	%v	%ch
 
 	SEL
-	CASESEND	%ch2	7	#sent
-	DEFAULT	#notsent
+	CASESEND	%ch2	7
+		SET	%result	"sent"
+	DEFAULT
+		SET	%result	"not sent"
 	ENDSEL
-	GOTO	#afterSend
 
-LABEL	#sent
-	SET	%result	"sent"
-	GOTO	#afterSend
-
-LABEL	#notsent
-	SET	%result	"not sent"
-
-LABEL	#afterSend
 	SEL
-	CASERECV	%v2	%ch2	#gotval
-	DEFAULT	#nothing
+	CASERECV	%v2	%ch2
+		SET	%result2	"received"
+	DEFAULT
+		SET	%result2	"empty"
 	ENDSEL
-	GOTO	#end
 
-LABEL	#gotval
-	SET	%result2	"received"
-	GOTO	#end
-
-LABEL	#nothing
-	SET	%result2	"empty"
-
-LABEL	#end
 	RET
 ENDFUNC

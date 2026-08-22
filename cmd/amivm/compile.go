@@ -112,6 +112,8 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
 				}
 			}
 		}
+	case *ast.ForStmt:
+		return findAndInsertBlank(&s.Body.List, varGoName)
 	case *ast.AssignStmt:
 		for _, rhs := range s.Rhs {
 			if fl, ok := rhs.(*ast.FuncLit); ok {

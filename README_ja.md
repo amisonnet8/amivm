@@ -96,7 +96,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し)に分けて[`test_ir/`](test_ir/)に置いています。
+全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション)に分けて[`test_ir/`](test_ir/)に置いています。
 
 ## IR言語の概要
 
@@ -120,7 +120,11 @@ Hello, AMIVM!
 - **算術・ビット演算・シフト・論理・比較**: `ADD` `SUB` `MUL` `DIV` `MOD` ・ `BAND` `BOR` `BXOR` `BCLEAR` `BNOT` ・ `SHL` `SHR` ・ `AND` `OR` `NOT` ・ `EQ` `NEQ` `LT` `LTE` `GT` `GTE`
 - **文字列**: `CONCAT`, `SLICE`
 - **ポインタ**: `ADDR`, `PGET`, `PSET`
-- **配列・制御フロー**: `ASET`, `AGET`, `LABEL`, `GOTO`, `IF`
+- **配列**: `ASET`, `AGET`
+- **ラベル・goto**: `LABEL`, `GOTO`
+- **条件分岐**: `IF`/`ELIF`/`ELSE`/`ENDIF`
+- **ループ**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`
+- **型アサーション**: `ASSERT`
 - **関数**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN`
 - **チャネル・`select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **スライス**: `SLTYPE`, `SLMAKE`, `SLICE`
@@ -166,7 +170,7 @@ ENDFUNC
 
 ## 制約
 
-- `FUNC`はトップレベルのみに置け、関数のネストはできません。`STTYPE`・`CLOS`・`SEL`も同様にネスト不可です。
+- `FUNC`はトップレベルのみに置け、関数のネストはできません。`STTYPE`も同様にネスト不可です。`IF`・`LOOP`・`CLOS`・`SEL`はいずれもネストでき、互いの中にも書けます。
 - 配列は1次元固定長のみです。多次元配列は、(未実装の)フロントエンド側でAMIVM-IRに渡す前に1次元へ展開する前提です。
 - 意味的な正しさ(型整合性・未定義識別子・メソッドの存在チェックなど)は全て`go/types`に委ねています。AMIVM自身が保証するのは、構文的に妥当なGoコードを出力することだけです。
 

@@ -96,7 +96,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, and Go method calls), live in [`test_ir/`](test_ir/).
+More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, and type assertions), live in [`test_ir/`](test_ir/).
 
 ## The IR language, briefly
 
@@ -120,7 +120,11 @@ Instructions are grouped roughly into:
 - **Arithmetic / bitwise / shift / logical / comparison**: `ADD` `SUB` `MUL` `DIV` `MOD` · `BAND` `BOR` `BXOR` `BCLEAR` `BNOT` · `SHL` `SHR` · `AND` `OR` `NOT` · `EQ` `NEQ` `LT` `LTE` `GT` `GTE`
 - **Strings**: `CONCAT`, `SLICE`
 - **Pointers**: `ADDR`, `PGET`, `PSET`
-- **Arrays & control flow**: `ASET`, `AGET`, `LABEL`, `GOTO`, `IF`
+- **Arrays**: `ASET`, `AGET`
+- **Labels & `goto`**: `LABEL`, `GOTO`
+- **Conditionals**: `IF`/`ELIF`/`ELSE`/`ENDIF`
+- **Loops**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`
+- **Type assertions**: `ASSERT`
 - **Functions**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN`
 - **Channels & `select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **Slices**: `SLTYPE`, `SLMAKE`, `SLICE`
@@ -166,7 +170,7 @@ running `amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt` (from inside `yourm
 
 ## Constraints
 
-- `FUNC` may only appear at the top level (no nested function definitions). `STTYPE`, `CLOS`, and `SEL` likewise cannot nest.
+- `FUNC` may only appear at the top level (no nested function definitions). `STTYPE` likewise cannot nest. `IF`, `LOOP`, `CLOS`, and `SEL` can all nest, including inside one another.
 - Arrays are one-dimensional, fixed-length only. Multi-dimensional arrays are expected to be flattened by the (not-yet-written) front end before reaching AMIVM-IR.
 - Semantic correctness (type checking, undefined identifiers, method existence, etc.) is entirely delegated to `go/types`; AMIVM itself only guarantees that it emits syntactically valid Go.
 

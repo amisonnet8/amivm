@@ -38,7 +38,7 @@ func buildProgram(source string) (*ast.File, error) {
 			if err != nil {
 				return nil, err
 			}
-			body, next, err := parseBody(lines, i+1, defName, 0, "ENDFUNC")
+			body, next, _, err := parseBody(lines, i+1, defName, 0, []string{"ENDFUNC"})
 			if err != nil {
 				return nil, fmt.Errorf("関数 %s のパースに失敗: %w", defName, err)
 			}

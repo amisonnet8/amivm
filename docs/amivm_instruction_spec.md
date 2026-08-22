@@ -30,7 +30,7 @@
 
 ## 2. トップレベルの制約
 
-関数の外(トップレベル)に置けるのは`GVAR`・`FUNC`・`CHTYPE`・`SLTYPE`・`STTYPE`・`MPTYPE`・`FNTYPE`のみ。`GVAR`はGoのパッケージレベル変数になる。`FUNC`のみ関数本体を持つブロックとして関数外に置け、それ以外の命令(演算・制御フロー等)は`FUNC`〜`ENDFUNC`の中でのみ使用できる。`FUNC`・`STTYPE`・`SEL`はネスト不可。`CLOS`だけは例外で、`CLOS`本体の中にさらに`CLOS`をネストできる(10節参照)。
+関数の外(トップレベル)に置けるのは`GVAR`・`FUNC`・`CHTYPE`・`SLTYPE`・`STTYPE`・`MPTYPE`・`FNTYPE`のみ。`GVAR`はGoのパッケージレベル変数になる。`FUNC`のみ関数本体を持つブロックとして関数外に置け、それ以外の命令(演算・制御フロー等)は`FUNC`〜`ENDFUNC`の中でのみ使用できる。`FUNC`・`STTYPE`はネスト不可。`IF`・`LOOP`・`CLOS`・`SEL`はいずれもネストできる(互いの本体の中に任意の組み合わせ・任意の深さで書ける。10節・11節・12節参照)。
 
 ## 3. 命令一覧
 
@@ -68,7 +68,15 @@
 | `CONCAT single1 slice1 slice2 ...` | `single1 = slice1 + slice2 ...` |
 | `LABEL label` | `label: ;` |
 | `GOTO label` | `goto label` |
-| `IF boolean1 label` | `if boolean1 { goto label }` |
+| `IF boolean1` | `if boolean1 {` |
+| `ELIF boolean1` | `} else if boolean1 {` |
+| `ELSE` | `} else {` |
+| `ENDIF` | `}`(`IF`終端) |
+| `LOOP` | `for {` |
+| `BREAK` | `break` |
+| `CONTINUE` | `continue` |
+| `ENDLOOP` | `}`(`LOOP`終端) |
+| `ASSERT multi1 (multi2) variable type1` | `multi1(, multi2) = variable.(type1)` |
 | `FUNC defname type1 type2 ... : type3 type4 ...` | `func defname(param1 type1, param2 type2 ...) (type3, type4 ...) {` |
 | `RET value1 value2 ...` | `return value1, value2 ...` |
 | `ENDFUNC` | `}`(`FUNC`終端) |
@@ -80,9 +88,9 @@
 | `CHSEND single1 value1` | `single1 <- value1` |
 | `CHRECV multi1 (multi2) single1` | `multi1(, multi2) = <-single1` |
 | `SEL` | `select {` |
-| `CASESEND single1 value1 label` | `case single1 <- value1: goto label`(`SEL`内) |
-| `CASERECV multi1 (multi2) single1 label` | `case multi1(, multi2) = <-single1: goto label`(`SEL`内) |
-| `DEFAULT label` | `default: goto label`(`SEL`内) |
+| `CASESEND single1 value1` | `case single1 <- value1:`(`SEL`内。以降`ENDSEL`か次のケースまでが本体) |
+| `CASERECV multi1 (multi2) single1` | `case multi1(, multi2) = <-single1:`(`SEL`内。同上) |
+| `DEFAULT` | `default:`(`SEL`内。同上) |
 | `ENDSEL` | `}`(`SEL`終端) |
 | `SLTYPE deftype type1` | `type deftype []type1`(関数外) |
 | `SLMAKE single1 deftype whole` | `single1 = make(deftype, whole)` |
@@ -101,7 +109,7 @@
 | `CLOS single1 type1 type2 ... : type3 type4 ...` | `single1 = func(amivm_closureL_param1 type1, amivm_closureL_param2 type2 ...) (type3, type4 ...) {` |
 | `ENDCLOS` | `}`(`CLOS`終端) |
 
-`ADD`は数値演算専用(常に2オペランド)。文字列連結は`CONCAT`(可変長引数)で行う。キャスト(型変換)・組み込み関数(`close`/`len`/`cap`等)は専用命令を持たず、`CALL`に統合している(9節参照)。
+`ADD`は数値演算専用(常に2オペランド)。文字列連結は`CONCAT`(可変長引数)で行う。キャスト(型変換)・組み込み関数(`close`/`len`/`cap`等)は専用命令を持たず、`CALL`に統合している(9節参照)。型アサーション(Goの`x.(T)`)だけは`CALL`に含めず`ASSERT`という専用命令にしている(13節参照)。
 
 `ADDR`の`point`は省略可能な第3引数で、`&variable`単体だけでなく`&variable.field`(構造体フィールドのアドレス)・`&variable[index]`(スライス/配列要素のアドレス)も表現できる。`point`が`>xxx`(フィールド名)かそれ以外かで生成先が分岐する。`&variable[point]`はスライス/配列専用で、`variable`がmapの場合は文法上は通っても`go/types`が「mapの要素はアドレス取得できない」というエラーを返す(AMIVM側では検証しない。9節の設計方針どおり)。
 
@@ -119,7 +127,9 @@
 
 ### `SEL`/`CASESEND`/`CASERECV`/`DEFAULT`/`ENDSEL`
 
-`CASESEND`/`CASERECV`は(旧`CASE SEND`/`CASE RECV`から)1語化されている。`CHRECV`/`CASERECV`の`(multi2)`は省略可能。省略時は1つ、指定時は2つ(値, ok)の代入になる。`SEL`は`FUNC`内にのみ出現する。`CASESEND`/`CASERECV`/`DEFAULT`の中身は1行で完結し、指定したラベルへ`goto`する。
+`CASESEND`/`CASERECV`は(旧`CASE SEND`/`CASE RECV`から)1語化されている。`CHRECV`/`CASERECV`の`(multi2)`は省略可能。省略時は1つ、指定時は2つ(値, ok)の代入になる。`SEL`は`FUNC`内、または`IF`/`LOOP`/`CLOS`/`SEL`の本体内に出現する(ネストできる。12節参照)。
+
+`CASESEND`/`CASERECV`/`DEFAULT`はもはや`label`を取らない。Goの`select`の`case`/`default`節がそうであるように、次の`CASESEND`/`CASERECV`/`DEFAULT`または`ENDSEL`が現れるまでの範囲を自分の本体として持つブロックになっており、本体には`VAR`宣言を含む任意の命令(`IF`/`LOOP`/`CLOS`/`SEL`のネストを含む)を書ける。この変更の経緯は16節参照。
 
 ### 変数は常に「宣言 → `=`で代入」に統一する
 
@@ -302,17 +312,71 @@ ENDFUNC
 
 ネストしたクロージャー引数を区別せずに全て`amivm_closure_paramN`という固定名にしてしまうと、内側の`CLOS`が外側と同じパラメータ番号を使った場合にGoの通常のスコープルールで外側がシャドーイングされ、外側のパラメータが内側から参照できなくなる。これを避けるため、Go側の実名に階層`L`を埋め込んでいる(4節参照)。
 
-`CLOS`は`FUNC`本体内、または`CLOS`本体内にのみ出現する。`LABEL`の直後に`SEL`/`CLOS`が来る場合の扱いは11節参照。
+`CLOS`は`FUNC`本体内、または`IF`/`LOOP`/`CLOS`/`SEL`の本体内にのみ出現する。`LABEL`の直後に`SEL`/`CLOS`が来る場合の扱いは14節参照。
 
-## 11. `LABEL`は常に`label: ;`(空文とセット)を生成する
+## 11. 条件分岐(IF)
+
+`IF`〜`ENDIF`は、Goの`if`/`else if`/`else`チェーンに対応するブロック構造。以前の単一行`IF boolean1 label`(`if boolean1 { goto label }`という条件付き`goto`)を置き換える形で導入された(経緯は16節参照。旧仕様との後方互換は無い)。
+
+```
+IF	boolean1
+	// 本体1
+ELIF	boolean1
+	// 本体2
+ELSE
+	// 本体3
+ENDIF
+```
+
+`ELIF`は0個以上、`ELSE`は0個または1個(書くなら`ELIF`列より後・`ENDIF`の直前)を許す。この形は、Goの`ast.IfStmt`が`Else`フィールドに`*ast.IfStmt`(else-ifの連鎖)か`*ast.BlockStmt`(最終`else`)のどちらか一方しか持てないという構造にそのまま対応しており、`ELSE`の後に`ELIF`や別の`ELSE`が続くことを許すと、そもそも妥当なGo ASTを組み立てられない。そのためこの並び順の違反は、`go/types`に投げる前の構文解析の時点で(数少ない例外として)AMIVM側が検証する。
+
+実装(`parseIfChain`)は、`IF`/`ELIF`1行分の条件+本体を読み、本体の終端が`ELIF`ならその行を新たな`IF`行と同じ扱いで自分自身へ再帰させて`Else`に据え、`ELSE`ならその本体を`*ast.BlockStmt`として`Else`に据え、`ENDIF`ならそこで打ち切る、という前方再帰で書かれている。本体の走査自体は`IF`/`LOOP`/`CLOS`/`SEL`いずれのネストも許す`parseBody`をそのまま使う。
+
+## 12. ループ(LOOP)
+
+`LOOP`〜`ENDLOOP`はGoの無限`for {}`に対応するブロック構造。`AMIVM-IR`には条件式付きループ専用の命令は無く、`while`相当の挙動は`LOOP`の中で`IF`と`BREAK`を組み合わせて表現する。
+
+```
+LOOP
+	IF	boolean1
+		BREAK
+	ENDIF
+	// ループ本体
+ENDLOOP
+```
+
+`BREAK`/`CONTINUE`はそれぞれGoの無名`break`/`continue`にそのまま対応し、常に自分を直接囲む最も内側の`LOOP`に対して働く。ラベル付き`break`/`continue`に相当する機能は無い。`LOOP`の外で`BREAK`/`CONTINUE`を使った場合、AMIVM側では構文チェックを行わない(`IF`の`ELSE`順序チェックとは違い、`ast.BranchStmt{Tok: token.BREAK}`は`LOOP`の有無に関わらず組み立てられてしまうため)。生成したGoコードに対して`go/types`が「break is not in a loop」のようなエラーを返す。意味の正しさの検証を`go/types`に委ねる設計方針どおりの割り切りである。
+
+`SEL`もGoの`select`と同様に`break`の対象になれる(9節参照)ため、`LOOP`を伴わずに`SEL`のケース本体へ書いた`BREAK`は、その`SEL`自体を抜ける挙動になる。これもGoの挙動をそのまま踏襲しているだけで、AMIVM側で特別な分岐は無い。
+
+## 13. 型アサーション(ASSERT)
+
+`ASSERT multi1 (multi2) variable type1`は、Goの型アサーション`variable.(type1)`に対応する。`CHRECV`/`CASERECV`/`MGET`と同じ`multi1 (multi2)`パターンを踏襲しており、`multi2`省略時は失敗すると`panic`する単一形(`multi1 = variable.(type1)`)、指定時は2つ目が`ok`値になり失敗しても`panic`しない形(`multi1, multi2 = variable.(type1)`)になる。
+
+```
+VAR	%x	^any
+VAR	%n	^int
+VAR	%s	^string
+VAR	%ok	^bool
+
+SET	%x	42
+ASSERT	%n	%x	^int
+ASSERT	%s	%ok	%x	^string
+```
+
+`variable`・`type1`はいずれも既存のカテゴリ(`variable`・`type`)をそのまま使えるため、`ASSERT`のために新設したカテゴリ・Kindは無い。キャスト(型変換)や`close`/`len`のような組み込み関数は`CALL`に統合しているが(9節参照)、型アサーションは`T(v)`という関数呼び出しに似た形を取らない(`v.(T)`という別構文の`ast.TypeAssertExpr`になる)ため、`CALL`には含めず専用命令にした。
+
+## 14. `LABEL`は常に`label: ;`(空文とセット)を生成する
 
 `LABEL label`は、直後に何が続くかに関わらず**常に**`label: ;`(ラベル+空文)を生成する。ラベル自身は他の行と一切連動しない、独立した1行完結の命令である。
 
 ```
 LABEL	#afterSend
 SEL
-CASERECV	%v	%ch	#gotval
-DEFAULT	#nothing
+CASERECV	%v	%ch
+	SET	%result	"got"
+DEFAULT
+	SET	%result	"empty"
 ENDSEL
 ```
 
@@ -323,21 +387,21 @@ afterSend:
 	;
 	select {
 	case v = <-ch:
-		goto gotval
+		result = "got"
 	default:
-		goto nothing
+		result = "empty"
 	}
 ```
 
-`LABEL`の直後に`SEL`/`CLOS`のような複数行ブロックが来ても、直後の通常の1行(`SET`等)が来ても、`ENDFUNC`/`ENDSEL`/`ENDCLOS`(ブロック終端)が来ても、`LABEL`自体の生成結果は変わらない。これにより「次の行が何であるかによって挙動を変える」先読み処理が一切不要になり、`LABEL`は`GOTO`や`SET`と同じ、通常の1行命令として扱える。
+`LABEL`の直後に`SEL`/`CLOS`/`IF`/`LOOP`のような複数行ブロックが来ても、直後の通常の1行(`SET`等)が来ても、`ENDFUNC`/`ENDSEL`/`ENDCLOS`/`ENDIF`/`ENDLOOP`(ブロック終端)が来ても、`LABEL`自体の生成結果は変わらない。これにより「次の行が何であるかによって挙動を変える」先読み処理が一切不要になり、`LABEL`は`GOTO`や`SET`と同じ、通常の1行命令として扱える。
 
-## 12. 実装パイプライン
+## 15. 実装パイプライン
 
 ```
 IRテキスト
   → 空行・//コメント行を除去した上で、タブ区切りでトークナイズ+分類(プレフィックス記号から先頭でKindが確定する)
   → 命令名(先頭トークン)で緩く分岐 → 命令ごとにカテゴリと照合して厳密に検証
-  → ast.File 組み立て(FUNC/SEL/CLOS/STTYPEのブロック抽出を含む)
+  → ast.File 組み立て(FUNC/SEL/CLOS/STTYPE/IF/LOOPのブロック抽出を含む)
   → format.Node でテキスト化
   → imports.Process で import解決
   → parser.ParseFile で再パース
@@ -358,7 +422,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 - 意味の正しさ(型整合性、未定義識別子、メソッド存在チェックなど)は`go/types`に全面的に委ね、AMIVM側で独自の検証ロジックは持たない
 - IR行番号と生成Goコードのエラー行を対応付ける仕組みは、当面の実装では省略する。ただし4節の命名規則により、エラーメッセージから「どの関数由来か」は分かるようになっている
 
-## 13. 過去の設計判断からの変更点(経緯メモ)
+## 16. 過去の設計判断からの変更点(経緯メモ)
 
 ### CLIから`go build`を切り離す変更
 
@@ -404,6 +468,16 @@ amivm-IRを使って2つの言語実装を書いてみたところ、次の4つ�
 `reStringLit`/`reRuneLit`(旧実装)は、それぞれ「`"`で囲まれた`"`以外の文字の並び」「`'`で囲まれた任意の1文字」という簡略化された正規表現で、実際にはGoの正規のエスケープシーケンスの多くを弾いてしまっていた。特に文字列リテラル内の`\"`(エスケープされたダブルクォート)は、`"`という文字そのものが正規表現の許可集合から除外されていたため、含まれているだけで文字列全体がKInvalid判定になっていた。ルーンリテラルは「任意の1文字」しか許さない実装だったため、`'\n'`のような2文字以上からなるエスケープシーケンスや`'\U0001F600'`のようなUnicodeコードポイント指定は、正当なGoのルーンリテラルであるにもかかわらず全て弾かれていた(唯一、非ASCIIの1文字("あ"等)は、Goの`regexp`がデフォルトでルーン単位にマッチするため元から通っていた)。
 
 修正後は、文字列は「エスケープされていない`"`以外の文字」または「`\`に続く任意の1文字」の繰り返しとして再定義し、`\"`を含む任意のエスケープシーケンスを1つの文字列トークンとして認識できるようにした。ルーンは、Unicode 1文字、Goの名前付きエスケープ(`\a`/`\b`/`\f`/`\n`/`\r`/`\t`/`\v`/`\\`/`\'`/`\"`)、`\uXXXX`(4桁hex)、`\UXXXXXXXX`(8桁hex)のいずれかを許容するよう拡張した。`\xHH`(2桁hexバイト値)・8進数バイト値エスケープ(`\nnn`)は、`\u`/`\U`で任意のUnicodeコードポイントを直接指定できるため意図的に対象外とした(整数・浮動小数点・虚数リテラルについても、Goのリテラル構文を完全に模倣する必要性は薄いと判断し、現状の単純な形式のまま維持している)。個々のエスケープが実際にGoとして妥当かどうか(存在しないコードポイント等)まではAMIVM側で検証せず、`go/types`による再パースに委ねる(9節参照)。
+
+### `IF`/`LOOP`をブロック構造にし、`SEL`のケース本体をブロック化し、`ASSERT`を追加した経緯
+
+これまでの制御フローは、単一行`IF boolean1 label`(条件付き`goto`)と`LABEL`/`GOTO`の組み合わせで表現する、いわば「構造化されていないgoto方式」だった。実用上は書けないロジックは無かったものの、Goのような構造化された`if`/`else if`/`else`・`for`を素直に表現する手段が無く、フロントエンド側で毎回`LABEL`/`GOTO`/単一行`IF`の組み合わせに手作業で展開する必要があった。これを解消するため、単一行`IF`を廃止し、`ELIF`/`ELSE`/`ENDIF`を伴うブロック形の`IF`に置き換え、新たに`LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`という無限ループ構造を追加した(11節・12節参照)。`LABEL`/`GOTO`自体は、構造化制御フローだけでは書けないジャンプ(Goの`goto`が元々担っている領域)のために残してあり、廃止していない。
+
+`IF`/`LOOP`を導入すると、それまで`FUNC`/`STTYPE`/`SEL`と同様にネスト禁止だった制約のうち、`SEL`だけ据え置くのは一貫性を欠く。`IF`の中に`LOOP`、その中に`IF`、というネストは構造化制御フローとして当然必要になるため、`IF`/`LOOP`/`CLOS`/`SEL`をまとめて「ネスト可能」に統一した(`CLOS`は既にネスト可能だったので変更なし)。この際、`SEL`の`CASESEND`/`CASERECV`/`DEFAULT`が「1行で完結し`label`へ`goto`する」という旧仕様のままだと、`SEL`のケースの中に`IF`/`LOOP`を書く余地が無く、「`SEL`もネストできる」という説明と実態が食い違う。そこで`CASESEND`/`CASERECV`/`DEFAULT`から`label`を撤去し、Goの`select`の`case`/`default`節そのままに、次のケースか`ENDSEL`までを本体として持つブロックに作り替えた(3節参照)。
+
+実装面では、`IF`の各分岐(`IF`/`ELIF`本体・`ELSE`本体)も`SEL`の各ケース本体も、突き詰めると「複数の候補キーワードのどれかが現れるまで文リストを読む」という同じ形をしている(`ELIF`/`ELSE`/`ENDIF`のどれか、または`CASESEND`/`CASERECV`/`DEFAULT`/`ENDSEL`のどれか)。そのため`parseBody`の第5引数を単一の終端キーワード(`string`)から終端キーワードの集合(`[]string`)に一般化し、どのキーワードで止まったかも合わせて返すようにした。これにより`IF`・`SEL`のどちらも同じ`parseBody`を使い回しつつ、`ELSE`の後に`ELIF`が続くような不正な並びは、`parseBody`が「今読んでいる本体の終端候補に含まれない予約語(`ELIF`/`ELSE`/`ENDIF`/`ENDLOOP`)」を検出した時点で構文エラーとして弾く(`amivm_spec.md`4.10節参照)、という一貫した仕組みで実現できた。
+
+`ASSERT`(型アサーション)は上記のIF/LOOPの作業と直接の関係は無いが、同じタイミングで追加された。Goの型アサーション`v.(T)`はキャスト`T(v)`と構文が紛らわしいものの、`ast.CallExpr`ではなく`ast.TypeAssertExpr`という別のASTノードになるため、既存の「キャスト・組み込み関数は`CALL`に統合する」方針(9節参照)にそのまま乗せることができず、専用命令として追加した。
 
 ### `LABEL`を常に`label: ;`にする変更
 

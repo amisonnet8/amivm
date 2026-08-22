@@ -17,7 +17,9 @@ FUNC	!main	:
 
 LABEL	#loop
 	GTE	%cond	%i	5
-	IF	%cond	#done
+	IF	%cond
+		GOTO	#done
+	ENDIF
 
 	AGET	%v	%arr	%i
 	ADD	%sum	%sum	%v

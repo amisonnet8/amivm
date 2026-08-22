@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"slices"
+	"strings"
 )
 
 // =====================================================================
@@ -126,19 +128,23 @@ func parseClosSignature(line, funcName string, currentLevel int) (targetExpr ast
 	return targetExpr, funcType, newLevel, nil
 }
 
-// parseBody は開始位置から、blockEnd に一致する行が見つかるまでを本体としてパースする。
-// SEL・CLOSは別ブロックとして先読みする。LABELはIR.txtの定義(`LABEL label → label: ;`)
-// どおり常に空文とセットで1行完結する命令のため、先読みは不要で他の1行命令と同様
-// parseSingleLine(defaultケース)に委ねる。
-func parseBody(lines []string, start int, funcName string, closureLevel int, blockEnd string) ([]ast.Stmt, int, error) {
-	var stmts []ast.Stmt
+// parseBody は開始位置から、blockEnds のいずれかに一致する行が見つかるまでを本体として
+// パースする。SEL・CLOS・IF・LOOPは別ブロックとして先読みする。LABELはIR.txtの定義
+// (`LABEL label → label: ;`)どおり常に空文とセットで1行完結する命令のため、先読みは
+// 不要で他の1行命令と同様parseSingleLine(defaultケース)に委ねる。
+//
+// blockEndsは1個(FUNC本体なら"ENDFUNC"、CLOS本体なら"ENDCLOS"、LOOP本体なら"ENDLOOP"、
+// SELの各ケース本体なら"CASESEND"/"CASERECV"/"DEFAULT"/"ENDSEL"の4個)を渡す。IFの各
+// 分岐本体は"ELIF"/"ELSE"/"ENDIF"の3個、ELSE本体だけは"ENDIF"の1個。戻り値のmatchedは、
+// 実際にどのblockEndで止まったかを呼び出し側(IF/SELの分岐)に伝えるためのもの。
+func parseBody(lines []string, start int, funcName string, closureLevel int, blockEnds []string) (stmts []ast.Stmt, next int, matched string, err error) {
 	i := start
 	for i < len(lines) {
 		line := lines[i]
 		kw := keyword(line)
 
-		if kw == blockEnd {
-			return stmts, i + 1, nil
+		if slices.Contains(blockEnds, kw) {
+			return stmts, i + 1, kw, nil
 		}
 
 		switch kw {
@@ -148,7 +154,7 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 		case "SEL":
 			selStmt, next, err := parseSelectBlock(lines, i+1, funcName, closureLevel)
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 			stmts = append(stmts, selStmt)
 			i = next
@@ -156,11 +162,11 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 		case "CLOS":
 			targetExpr, funcType, newLevel, err := parseClosSignature(line, funcName, closureLevel)
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
-			body, next, err := parseBody(lines, i+1, funcName, newLevel, "ENDCLOS")
+			body, next, _, err := parseBody(lines, i+1, funcName, newLevel, []string{"ENDCLOS"})
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 			funcLit := &ast.FuncLit{Type: funcType, Body: &ast.BlockStmt{List: body}}
 			stmts = append(stmts, &ast.AssignStmt{
@@ -168,10 +174,32 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 			})
 			i = next
 			continue
+		case "IF":
+			ifStmt, next, err := parseIfChain(lines, i, funcName, closureLevel)
+			if err != nil {
+				return nil, 0, "", err
+			}
+			stmts = append(stmts, ifStmt)
+			i = next
+			continue
+		case "LOOP":
+			loopStmt, next, err := parseLoopBlock(lines, i, funcName, closureLevel)
+			if err != nil {
+				return nil, 0, "", err
+			}
+			stmts = append(stmts, loopStmt)
+			i = next
+			continue
+		case "ELIF", "ELSE":
+			return nil, 0, "", fmt.Errorf("%sはIFの外、またはELSEの後には使えません: %s", kw, line)
+		case "ENDIF":
+			return nil, 0, "", fmt.Errorf("対応するIFが見つかりません: %s", line)
+		case "ENDLOOP":
+			return nil, 0, "", fmt.Errorf("対応するLOOPが見つかりません: %s", line)
 		default:
 			stmt, err := parseSingleLine(line, funcName, closureLevel)
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 			if stmt != nil {
 				stmts = append(stmts, stmt)
@@ -179,50 +207,112 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 			i++
 		}
 	}
-	return nil, 0, fmt.Errorf("対応する%sが見つかりません", blockEnd)
+	return nil, 0, "", fmt.Errorf("対応する%sが見つかりません", strings.Join(blockEnds, "または"))
 }
 
-func parseSelectBlock(lines []string, start int, funcName string, closureLevel int) (ast.Stmt, int, error) {
-	var clauses []ast.Stmt
-	i := start
-	for i < len(lines) {
-		line := lines[i]
-		kw := keyword(line)
-		if kw == "ENDSEL" {
-			return &ast.SelectStmt{Body: &ast.BlockStmt{List: clauses}}, i + 1, nil
-		}
-		clause, err := parseCaseOrDefault(line, funcName, closureLevel)
+// parseIfChain は「IF boolean1」(または再帰呼び出しでは「ELIF boolean1」)から始まる
+// 分岐チェーンをENDIFまで解析する。headerIdxはそのIF/ELIF行自体のインデックス。
+// ELIFが見つかれば同じ関数を再帰し、それをast.IfStmt.Elseへ、ELSEが見つかれば
+// その本体(ENDIFまで)をast.IfStmt.Elseへ*ast.BlockStmtとして据える。ELSEの後に
+// さらにELIF/ELSEが続く場合は、ELSE本体をblockEnds=["ENDIF"]だけで読むため、
+// parseBodyの「ELIF/ELSEは予約語」ケースがそれを拾って構文エラーにする。
+func parseIfChain(lines []string, headerIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+	atoms := tokenizeAndClassify(lines[headerIdx])
+	if len(atoms) != 2 || (atoms[0].Raw != "IF" && atoms[0].Raw != "ELIF") {
+		return nil, 0, fmt.Errorf("IF/ELIF構文が不正です(書式: IF boolean1 / ELIF boolean1): %s", lines[headerIdx])
+	}
+	kw := atoms[0].Raw
+	cond, err := atomExpr(atoms[1], funcName, closureLevel, CatBool)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%sの条件が不正です: %w", kw, err)
+	}
+
+	body, next, matched, err := parseBody(lines, headerIdx+1, funcName, closureLevel, []string{"ELIF", "ELSE", "ENDIF"})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ifStmt := &ast.IfStmt{Cond: cond, Body: &ast.BlockStmt{List: body}}
+
+	switch matched {
+	case "ENDIF":
+		return ifStmt, next, nil
+	case "ELIF":
+		elseStmt, next2, err := parseIfChain(lines, next-1, funcName, closureLevel)
 		if err != nil {
 			return nil, 0, err
 		}
-		clauses = append(clauses, clause)
-		i++
+		ifStmt.Else = elseStmt
+		return ifStmt, next2, nil
+	default: // "ELSE"
+		elseBody, next2, _, err := parseBody(lines, next, funcName, closureLevel, []string{"ENDIF"})
+		if err != nil {
+			return nil, 0, err
+		}
+		ifStmt.Else = &ast.BlockStmt{List: elseBody}
+		return ifStmt, next2, nil
 	}
-	return nil, 0, fmt.Errorf("対応するENDSELが見つかりません")
 }
 
-func parseCaseOrDefault(line, funcName string, closureLevel int) (ast.Stmt, error) {
+// parseLoopBlock は「LOOP」からENDLOOPまでを解析する。loopIdxはLOOP行自体のインデックス。
+func parseLoopBlock(lines []string, loopIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+	atoms := tokenizeAndClassify(lines[loopIdx])
+	if len(atoms) != 1 || atoms[0].Raw != "LOOP" {
+		return nil, 0, fmt.Errorf("LOOP構文が不正です(書式: LOOP): %s", lines[loopIdx])
+	}
+	body, next, _, err := parseBody(lines, loopIdx+1, funcName, closureLevel, []string{"ENDLOOP"})
+	if err != nil {
+		return nil, 0, err
+	}
+	return &ast.ForStmt{Body: &ast.BlockStmt{List: body}}, next, nil
+}
+
+// parseSelectBlock は「SEL」からENDSELまでを解析する。startはSEL直後の行のインデックス。
+// CASESEND/CASERECV/DEFAULTはもはやlabelを取らず、次のCASESEND/CASERECV/DEFAULTか
+// ENDSELまでを自分の本体として持つブロックになっている(旧仕様は単一行のgotoのみ)。
+func parseSelectBlock(lines []string, start int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+	caseKeywords := []string{"CASESEND", "CASERECV", "DEFAULT", "ENDSEL"}
+	var clauses []ast.Stmt
+	i := start
+	for {
+		if i >= len(lines) {
+			return nil, 0, fmt.Errorf("対応するENDSELが見つかりません")
+		}
+		kw := keyword(lines[i])
+		if kw == "ENDSEL" {
+			return &ast.SelectStmt{Body: &ast.BlockStmt{List: clauses}}, i + 1, nil
+		}
+		comm, err := parseCaseHeader(lines[i], funcName, closureLevel)
+		if err != nil {
+			return nil, 0, err
+		}
+		body, next, _, err := parseBody(lines, i+1, funcName, closureLevel, caseKeywords)
+		if err != nil {
+			return nil, 0, err
+		}
+		clauses = append(clauses, &ast.CommClause{Comm: comm, Body: body})
+		i = next - 1
+	}
+}
+
+// parseCaseHeader は「CASESEND single1 value1」/「CASERECV multi1 (multi2) single1」/
+// 「DEFAULT」のヘッダ行を解釈し、ast.CommClause.Commに使うast.Stmtを返す
+// (DEFAULTはnil)。本体側はparseSelectBlockがparseBodyへ委譲する。
+func parseCaseHeader(line, funcName string, closureLevel int) (ast.Stmt, error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 {
 		return nil, fmt.Errorf("SEL内に空行は置けません")
 	}
 	switch atoms[0].Raw {
 	case "DEFAULT":
-		if len(atoms) != 2 {
-			return nil, fmt.Errorf("DEFAULT構文が不正です(書式: DEFAULT label): %s", line)
-		}
-		if err := checkKind(atoms[1], CatLabel); err != nil {
-			return nil, fmt.Errorf("DEFAULTのラベルが不正です: %w", err)
-		}
-		name, err := labelGoName(atoms[1])
-		if err != nil {
+		if err := expectArgs("DEFAULT", atoms[1:], 0); err != nil {
 			return nil, err
 		}
-		return &ast.CommClause{Comm: nil, Body: []ast.Stmt{gotoStmt(name)}}, nil
+		return nil, nil
 
 	case "CASESEND":
-		if len(atoms) != 4 {
-			return nil, fmt.Errorf("CASESEND構文が不正です(書式: CASESEND single value1 label): %s", line)
+		if err := expectArgs("CASESEND", atoms[1:], 2); err != nil {
+			return nil, err
 		}
 		ch, err := atomExpr(atoms[1], funcName, closureLevel, CatSingle)
 		if err != nil {
@@ -232,33 +322,20 @@ func parseCaseOrDefault(line, funcName string, closureLevel int) (ast.Stmt, erro
 		if err != nil {
 			return nil, fmt.Errorf("CASESENDの送信値が不正です: %w", err)
 		}
-		if err := checkKind(atoms[3], CatLabel); err != nil {
-			return nil, fmt.Errorf("CASESENDのラベルが不正です: %w", err)
-		}
-		name, err := labelGoName(atoms[3])
-		if err != nil {
-			return nil, err
-		}
-		return &ast.CommClause{
-			Comm: &ast.SendStmt{Chan: ch, Value: v},
-			Body: []ast.Stmt{gotoStmt(name)},
-		}, nil
+		return &ast.SendStmt{Chan: ch, Value: v}, nil
 
 	case "CASERECV":
 		var destAtoms []Atom
 		var chAtom Atom
-		var labelAtom Atom
 		switch len(atoms) {
-		case 4:
+		case 3:
 			destAtoms = atoms[1:2]
 			chAtom = atoms[2]
-			labelAtom = atoms[3]
-		case 5:
+		case 4:
 			destAtoms = atoms[1:3]
 			chAtom = atoms[3]
-			labelAtom = atoms[4]
 		default:
-			return nil, fmt.Errorf("CASERECV構文が不正です(書式: CASERECV l1 (l2) cs label): %s", line)
+			return nil, fmt.Errorf("CASERECV構文が不正です(書式: CASERECV l1 (l2) cs): %s", line)
 		}
 		var lhs []ast.Expr
 		for _, d := range destAtoms {
@@ -272,18 +349,10 @@ func parseCaseOrDefault(line, funcName string, closureLevel int) (ast.Stmt, erro
 		if err != nil {
 			return nil, fmt.Errorf("CASERECVのチャネルが不正です: %w", err)
 		}
-		if err := checkKind(labelAtom, CatLabel); err != nil {
-			return nil, fmt.Errorf("CASERECVのラベルが不正です: %w", err)
-		}
-		name, err := labelGoName(labelAtom)
-		if err != nil {
-			return nil, err
-		}
-		recvStmt := &ast.AssignStmt{
+		return &ast.AssignStmt{
 			Lhs: lhs, Tok: token.ASSIGN,
 			Rhs: []ast.Expr{&ast.UnaryExpr{Op: token.ARROW, X: ch}},
-		}
-		return &ast.CommClause{Comm: recvStmt, Body: []ast.Stmt{gotoStmt(name)}}, nil
+		}, nil
 
 	default:
 		return nil, fmt.Errorf("SEL内で使えるのはCASESEND/CASERECV/DEFAULTのみです: %s", line)

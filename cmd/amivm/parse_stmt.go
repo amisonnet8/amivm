@@ -79,8 +79,12 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 		return parseLabel(rest)
 	case "GOTO":
 		return parseGoto(rest)
-	case "IF":
-		return parseIf(rest, funcName, closureLevel)
+	case "BREAK":
+		return parseBreakOrContinue("BREAK", rest)
+	case "CONTINUE":
+		return parseBreakOrContinue("CONTINUE", rest)
+	case "ASSERT":
+		return parseAssert(rest, funcName, closureLevel)
 	case "RET":
 		return parseRet(rest, funcName, closureLevel)
 	case "CALL":
@@ -401,25 +405,16 @@ func gotoStmt(label string) ast.Stmt {
 	return &ast.BranchStmt{Tok: token.GOTO, Label: ast.NewIdent(label)}
 }
 
-func parseIf(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
-	if err := expectArgs("IF", atoms, 2); err != nil {
+// parseBreakOrContinue は「BREAK」「CONTINUE」を解釈する(どちらもオペランド無し)。
+func parseBreakOrContinue(kw string, atoms []Atom) (ast.Stmt, error) {
+	if err := expectArgs(kw, atoms, 0); err != nil {
 		return nil, err
 	}
-	cond, err := atomExpr(atoms[0], funcName, closureLevel, CatBool)
-	if err != nil {
-		return nil, fmt.Errorf("IFの条件が不正です: %w", err)
+	tok := token.BREAK
+	if kw == "CONTINUE" {
+		tok = token.CONTINUE
 	}
-	if err := checkKind(atoms[1], CatLabel); err != nil {
-		return nil, fmt.Errorf("IFのラベルが不正です: %w", err)
-	}
-	name, err := labelGoName(atoms[1])
-	if err != nil {
-		return nil, err
-	}
-	return &ast.IfStmt{
-		Cond: cond,
-		Body: &ast.BlockStmt{List: []ast.Stmt{gotoStmt(name)}},
-	}, nil
+	return &ast.BranchStmt{Tok: tok}, nil
 }
 
 func parseRet(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
@@ -753,5 +748,38 @@ func parseMpKeys(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
 		Rhs: []ast.Expr{collectCall},
+	}, nil
+}
+
+// parseAssert は「ASSERT multi1 (multi2) variable type1」を解釈する
+// (multi1(, multi2) = variable.(type1))。multi2省略時は失敗するとpanicする単一形、
+// 指定時は2つ目がok値になり失敗してもpanicしない(Goの型アサーションと同じ)。
+func parseAssert(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
+	if len(atoms) < 3 || len(atoms) > 4 {
+		return nil, fmt.Errorf("ASSERT構文が不正です(書式: ASSERT l1 (l2) variable type1): %s", joinRaw(atoms))
+	}
+	typeAtom := atoms[len(atoms)-1]
+	variableAtom := atoms[len(atoms)-2]
+	destAtoms := atoms[:len(atoms)-2]
+
+	var lhs []ast.Expr
+	for _, d := range destAtoms {
+		e, err := atomExpr(d, funcName, closureLevel, CatMulti)
+		if err != nil {
+			return nil, fmt.Errorf("ASSERTの代入先が不正です: %w", err)
+		}
+		lhs = append(lhs, e)
+	}
+	variable, err := atomExpr(variableAtom, funcName, closureLevel, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("ASSERTの対象が不正です: %w", err)
+	}
+	typExpr, err := atomExpr(typeAtom, "", 0, CatType)
+	if err != nil {
+		return nil, fmt.Errorf("ASSERTの型が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: lhs, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.TypeAssertExpr{X: variable, Type: typExpr}},
 	}, nil
 }

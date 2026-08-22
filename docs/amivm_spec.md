@@ -34,7 +34,8 @@ Goコード
 ### 2.1 構造上の制約
 
 - `FUNC`はトップレベルのみに置ける(関数のネスト不可)
-- `FUNC`・`STTYPE`・`SEL`はネスト不可。`CLOS`のみ例外で、`CLOS`本体の中にさらに`CLOS`をネストできる。ネストの深さは`FUNC`直下を1として数え、クロージャー引数`&L-N`の階層番号`L`に対応する
+- `FUNC`・`STTYPE`はネスト不可
+- `IF`・`LOOP`・`CLOS`・`SEL`はいずれもネストできる。互いの本体の中に、`IF`/`LOOP`/`CLOS`/`SEL`を任意の組み合わせ・任意の深さで書ける(例: `LOOP`の中に`IF`、その中に`CLOS`、その中に`SEL`、というような入れ子も可能)。`CLOS`のネスト深さ(`FUNC`直下を1として数える)は、クロージャー引数`&L-N`の階層番号`L`に対応する
 - 配列は1次元固定長のみ
 - 多次元配列はAMIVM-IR自体では表現しない。多次元配列はフロントエンド側で1次元に展開する
 
@@ -138,15 +139,56 @@ Goコード
 |---|---|
 | `CONCAT single1 slice1 slice2 ...` | `single1 = slice1 + slice2 ...` |
 
-### 4.9 ラベル・分岐
+### 4.9 ラベル・GOTO
 
 | 命令 | 生成されるGoコード |
 |---|---|
 | `LABEL label` | `label: ;` |
 | `GOTO label` | `goto label` |
-| `IF boolean1 label` | `if boolean1 { goto label }` |
 
-### 4.10 関数定義
+### 4.10 条件分岐(IF)
+
+| 命令 | 生成されるGoコード | 備考 |
+|---|---|---|
+| `IF boolean1` | `if boolean1 {` | |
+| `ELIF boolean1` | `} else if boolean1 {` | |
+| `ELSE` | `} else {` | |
+| `ENDIF` | `}` | `IF`終端 |
+
+`IF`〜`ENDIF`の間に、`ELIF`(0個以上)・`ELSE`(0個または1個)を書ける。構文規則は以下のとおり(いずれも違反した場合はパースエラーになる)。
+
+- `ELIF`は`IF`の直後から`ENDIF`の直前まで、好きな数だけ書ける
+- `ELSE`は書くとしても1個のみ
+- `ELSE`を書く場合、それは`ELIF`より後・`ENDIF`の直前でなければならない(`ELSE`の後に`ELIF`や別の`ELSE`が続くことはできない)
+- `ENDIF`は省略できない
+
+これはGoの`ast.IfStmt`の構造(`Else`フィールドは`*ast.IfStmt`(else-if)か`*ast.BlockStmt`(最終else)のどちらか一方しか持てない)に対応した制約で、`ELSE`より後に`ELIF`を許すと妥当なGo ASTを組み立てられない。
+
+`IF`/`ELIF`/`ELSE`の各本体には、`VAR`宣言を含む任意の命令(`IF`/`LOOP`/`CLOS`/`SEL`のネストを含む)を書ける。
+
+### 4.11 ループ(LOOP)
+
+| 命令 | 生成されるGoコード | 備考 |
+|---|---|---|
+| `LOOP` | `for {` | |
+| `BREAK` | `break` | |
+| `CONTINUE` | `continue` | |
+| `ENDLOOP` | `}` | `LOOP`終端 |
+
+条件付きループ(`while`相当)は`LOOP`の中で`IF`と`BREAK`を組み合わせて表現する(`AMIVM-IR`に条件式付きループ専用の命令は無い)。
+
+```
+LOOP
+	IF boolean1
+		BREAK
+	ENDIF
+	// ループ本体
+ENDLOOP
+```
+
+`BREAK`/`CONTINUE`は、常に自分を直接囲む最も内側の`LOOP`に対して働く(Goの無名`break`/`continue`と同じ挙動)。ラベル付き`break`/`continue`に相当する機能は無い。`LOOP`の外で`BREAK`/`CONTINUE`を使った場合の構文チェックはAMIVM側では行わない(生成したGoコードに対して`go/types`が「break is not in a loop」のようなエラーを返す。意味の正しさの検証を`go/types`に委ねる設計方針どおり)。
+
+### 4.12 関数定義
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -154,7 +196,7 @@ Goコード
 | `RET value1 value2 ...` | `return value1, value2 ...` | |
 | `ENDFUNC` | `}` | `FUNC`終端 |
 
-### 4.11 関数呼び出し
+### 4.13 関数呼び出し
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -162,7 +204,7 @@ Goコード
 | `DEFER callname value1 value2 ...` | `defer callname(value1, value2 ...)` | |
 | `SPAWN callname value1 value2 ...` | `go callname(value1, value2 ...)` | |
 
-### 4.12 チャネル
+### 4.14 チャネル
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -171,17 +213,19 @@ Goコード
 | `CHSEND single1 value1` | `single1 <- value1` | |
 | `CHRECV multi1 (multi2) single1` | `multi1(, multi2) = <-single1` | |
 
-### 4.13 select
+### 4.15 select
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `SEL` | `select {` | |
-| `CASESEND single1 value1 label` | `case single1 <- value1: goto label` | `SEL`内 |
-| `CASERECV multi1 (multi2) single1 label` | `case multi1(, multi2) = <-single1: goto label` | `SEL`内 |
-| `DEFAULT label` | `default: goto label` | `SEL`内 |
+| `CASESEND single1 value1` | `case single1 <- value1:` | `SEL`内。以降`ENDSEL`か次の`CASESEND`/`CASERECV`/`DEFAULT`までが本体 |
+| `CASERECV multi1 (multi2) single1` | `case multi1(, multi2) = <-single1:` | `SEL`内。同上 |
+| `DEFAULT` | `default:` | `SEL`内。同上 |
 | `ENDSEL` | `}` | `SEL`終端 |
 
-### 4.14 スライス
+`CASESEND`/`CASERECV`/`DEFAULT`はもはや`label`を取らず、代わりにGoの`select`の`case`/`default`節と同じように、次の`CASESEND`/`CASERECV`/`DEFAULT`または`ENDSEL`が現れるまでの範囲を自分の本体として持つ。本体には`VAR`宣言を含む任意の命令(`IF`/`LOOP`/`CLOS`/`SEL`のネストを含む)を書ける。`BREAK`はGoの挙動どおり、`LOOP`が無ければ`SEL`自体を抜ける(Goの`select`は`for`と同じく`break`の対象になれるため)。
+
+### 4.16 スライス
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -189,7 +233,7 @@ Goコード
 | `SLMAKE single1 deftype whole` | `single1 = make(deftype, whole)` | |
 | `SLICE single1 slice1 from to` | `single1 = slice1[from:to]` | |
 
-### 4.15 構造体
+### 4.17 構造体
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -199,7 +243,7 @@ Goコード
 | `FSET single1 field value1` | `single1.field = value1` | |
 | `FGET single1 variable field` | `single1 = variable.field` | |
 
-### 4.16 map
+### 4.18 map
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -209,13 +253,19 @@ Goコード
 | `MGET multi1 (multi2) single1 value1` | `multi1(, multi2) = single1[value1]` | |
 | `MPKEYS single1 single2` | `single1 = slices.Collect(maps.Keys(single2))` | `slices`/`maps`パッケージ(Go標準ライブラリ)を利用。mapを走査する手段として使う |
 
-### 4.17 クロージャー・関数型
+### 4.19 クロージャー・関数型
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
 | `FNTYPE deftype type1 type2 ... : type3 type4 ...` | `type deftype func(type1, type2 ...) (type3, type4 ...)` | 関数外 |
 | `CLOS single1 type1 type2 ... : type3 type4 ...` | `single1 = func(amivm_closureL_param1 type1, amivm_closureL_param2 type2 ...) (type3, type4 ...) {` | `L`はこの`CLOS`のネスト深さ(`FUNC`直下が1、ネストするごとに+1) |
 | `ENDCLOS` | `}` | `CLOS`終端 |
+
+### 4.20 型アサーション
+
+| 命令 | 生成されるGoコード | 備考 |
+|---|---|---|
+| `ASSERT multi1 (multi2) variable type1` | `multi1(, multi2) = variable.(type1)` | `multi2`省略時は1つの代入(失敗時にpanicする単一形)。指定時は2つ(値, ok)の代入になり、失敗してもpanicしない |
 
 ## 5. オペランドカテゴリ
 

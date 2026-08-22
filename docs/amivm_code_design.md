@@ -25,7 +25,7 @@ IRテキスト
   ↓ 3. 命令の判定(先頭Atomの文字列で分岐)
   ↓ 4. 各命令のパース(Atom列を読み、カテゴリと照合するだけ)
 ast.Expr / ast.Stmt
-  ↓ 5. ブロック構造の組み立て(FUNC/SEL/CLOS/STTYPE)
+  ↓ 5. ブロック構造の組み立て(FUNC/SEL/CLOS/STTYPE/IF/LOOP)
 ast.File
   ↓ 6. Goソース出力パイプライン(format → import解決 → 型チェック・未使用変数の自己修復 → 書き出し)
 Goソースファイル
@@ -84,7 +84,7 @@ func splitLinesTrimmed(source string) []string {
 
 `parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error)`
 
-`tokenizeAndClassify`で分類済みの`Atom`列を受け取り、**先頭Atomの文字列(`Raw`)だけ**を見て、対応するパース関数に振り分ける。命令名(`VAR`, `ADD`など)は予約語なので、`Kind`(値としての種別)ではなく`Raw`文字列で判定する。`closureLevel`は、この行が現在どの`CLOS`ネスト深さにいるか(`FUNC`直下なら0)を表し、`&N`(自分の階層のクロージャー引数)の解決に使う(9節参照)。
+`tokenizeAndClassify`で分類済みの`Atom`列を受け取り、**先頭Atomの文字列(`Raw`)だけ**を見て、対応するパース関数に振り分ける。命令名(`VAR`, `ADD`など)は予約語なので、`Kind`(値としての種別)ではなく`Raw`文字列で判定する。`closureLevel`は、この行が現在どの`CLOS`ネスト深さにいるか(`FUNC`直下なら0)を表し、`&N`(自分の階層のクロージャー引数)の解決に使う(3節の`atomToExpr`参照)。
 
 ```go
 func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) {
@@ -107,7 +107,7 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 }
 ```
 
-ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`IF`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`/`MPKEYS`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
+ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`BREAK`/`CONTINUE`/`ASSERT`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`/`MPKEYS`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。`BREAK`/`CONTINUE`もオペランド無しの1行命令で、`&ast.BranchStmt{Tok: token.BREAK}`/`token.CONTINUE`を返すだけ(`LOOP`の中かどうかの検証はしない。`go/types`が「break is not in a loop」等で検出する)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`/`IF`/`LOOP`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する(`IF`は旧仕様の単一行`IF boolean1 label`を廃止し、`ELIF`/`ELSE`/`ENDIF`を伴うブロック構造になったため、`parseSingleLine`からは外れた)。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
 
 ## 3. トークンの分類体系(Kind)
 
@@ -336,20 +336,53 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 
 行単位のパースだけでは表現できない、複数行にまたがる構造を扱う部分。
 
-### `parseBody` — `FUNC`/`CLOS`本体の構築
+### `parseBody` — `FUNC`/`CLOS`/`IF`/`LOOP`/`SEL`本体の構築
 
-開始位置から、指定した終端キーワード(`ENDFUNC`または`ENDCLOS`)が現れるまでの行を走査し、`[]ast.Stmt`を組み立てる。`FUNC`本体と`CLOS`本体は同じ`parseBody`を再帰的に使い回している(`CLOS`は`funcName`を外側の`FUNC`のものそのまま引き継ぐ。`CLOS`自体は無名で専用の名前空間を持たないため、内部で`VAR`宣言した変数は外側の関数名で修飾される)。`FUNC`/`STTYPE`/`SEL`と異なり`CLOS`だけはネストできるため、`parseBody`は`closureLevel int`という引数も受け取り、現在地点のクロージャーネスト深さ(`FUNC`直下なら0)を再帰呼び出しに引き継ぐ。
+開始位置から、指定した終端キーワード集合(`blockEnds []string`)のいずれかが現れるまでの行を走査し、`([]ast.Stmt, next int, matched string, error)`を返す。単純な`FUNC`本体(`blockEnds = ["ENDFUNC"]`)・`CLOS`本体(`["ENDCLOS"]`)では`blockEnds`は要素数1で、返り値の`matched`は常にその1個と一致するため呼び出し側は無視してよい。`IF`の各分岐本体(`["ELIF", "ELSE", "ENDIF"]`)・`SEL`の各ケース本体(`["CASESEND", "CASERECV", "DEFAULT", "ENDSEL"]`)は複数の終端候補を持つため、`matched`を見て「次に何が来たか」を呼び出し側で分岐する。
+
+```go
+func parseBody(lines []string, start int, funcName string, closureLevel int, blockEnds []string) ([]ast.Stmt, int, string, error) {
+    i := start
+    for i < len(lines) {
+        kw := keyword(lines[i])
+        if slices.Contains(blockEnds, kw) {
+            return stmts, i + 1, kw, nil
+        }
+        switch kw {
+        case "SEL":   /* parseSelectBlockへ委譲 */
+        case "CLOS":  /* parseClosSignature + 再帰呼び出し */
+        case "IF":    /* parseIfChainへ委譲 */
+        case "LOOP":  /* parseLoopBlockへ委譲 */
+        case "ELIF", "ELSE":
+            return nil, 0, "", fmt.Errorf("%sはIFの外、またはELSEの後には使えません: %s", kw, lines[i])
+        case "ENDIF":
+            return nil, 0, "", fmt.Errorf("対応するIFが見つかりません: %s", lines[i])
+        case "ENDLOOP":
+            return nil, 0, "", fmt.Errorf("対応するLOOPが見つかりません: %s", lines[i])
+        default:
+            /* parseSingleLine */
+        }
+    }
+    return nil, 0, "", fmt.Errorf("対応する%sが見つかりません", strings.Join(blockEnds, "または"))
+}
+```
+
+このように「今読んでいる`blockEnds`に含まれない予約語(`ELIF`/`ELSE`/`ENDIF`/`ENDLOOP`)が現れたら即座にエラーにする」という設計により、`IF`の`ELSE`の後に`ELIF`が続くような不正な並びを、専用の検証コードを書かずに`parseBody`の通常の分岐だけで検出できる(詳細は後述の`parseIfChain`参照)。
+
+`FUNC`本体・`CLOS`本体は同じ`parseBody`を再帰的に使い回している(`CLOS`は`funcName`を外側の`FUNC`のものそのまま引き継ぐ。`CLOS`自体は無名で専用の名前空間を持たないため、内部で`VAR`宣言した変数は外側の関数名で修飾される)。`FUNC`/`STTYPE`と異なり`IF`/`LOOP`/`CLOS`/`SEL`はいずれもネストできるため、`parseBody`は`closureLevel int`という引数も受け取り、現在地点のクロージャーネスト深さ(`FUNC`直下なら0)を再帰呼び出しに引き継ぐ(`IF`/`LOOP`/`SEL`自体はネストの深さを変えない。深さが変わるのは`CLOS`だけ)。
 
 - 通常の行は`parseSingleLine`にそのまま`closureLevel`を渡してパースして追加
-- `SEL`行が出てきたら`closureLevel`をそのまま引き継いで`parseSelectBlock`に処理を委譲する(`SEL`自体はネストの深さを変えない)
+- `SEL`行が出てきたら`closureLevel`をそのまま引き継いで`parseSelectBlock`に処理を委譲する
 - `CLOS`行が出てきたら`parseClosSignature`でシグネチャを解析する。代入先(`single1`)は現在の`closureLevel`で解決し、本体側は`closureLevel+1`(`newLevel`)を`parseBody`の再帰呼び出しに渡す。`*ast.FuncLit`にラップして代入先への代入文(`ast.AssignStmt`, `token.ASSIGN`)として積む
+- `IF`行が出てきたら`parseIfChain`に委譲する
+- `LOOP`行が出てきたら`parseLoopBlock`に委譲する
 - それ以外の行(`LABEL`含む)は全て`parseSingleLine`にそのまま渡す
 
 ```go
 case "CLOS":
     targetExpr, funcType, newLevel, err := parseClosSignature(line, funcName, closureLevel)
     // ...
-    body, next, err := parseBody(lines, i+1, funcName, newLevel, "ENDCLOS")
+    body, next, _, err := parseBody(lines, i+1, funcName, newLevel, []string{"ENDCLOS"})
     // ...
     funcLit := &ast.FuncLit{Type: funcType, Body: &ast.BlockStmt{List: body}}
     stmts = append(stmts, &ast.AssignStmt{
@@ -375,24 +408,82 @@ func parseLabel(atoms []Atom) (ast.Stmt, error) {
 }
 ```
 
-これにより`parseBody`側に`LABEL`専用の分岐は存在しない。以前は「`LABEL`の直後の行を先読みし、`SEL`/`CLOS`(ブロック開始行)かどうかで挙動を変える」という特殊なロジックを持っていたが、`amivm_spec.md`の仕様を「ラベルは常に空文とセットで1行完結する」に変更したことで、この先読み処理自体が丸ごと不要になった。`LABEL`の直後にどんな行(通常の1行・`SEL`・`CLOS`・ブロック終端・別の`LABEL`)が来ても、`LABEL`自身の生成結果は変わらず、後続の行は`parseBody`のループが独立した次の1文として扱う。生成される Go コードは次のようになる。
+これにより`parseBody`側に`LABEL`専用の分岐は存在しない。以前は「`LABEL`の直後の行を先読みし、`SEL`/`CLOS`(ブロック開始行)かどうかで挙動を変える」という特殊なロジックを持っていたが、`amivm_spec.md`の仕様を「ラベルは常に空文とセットで1行完結する」に変更したことで、この先読み処理自体が丸ごと不要になった。`LABEL`の直後にどんな行(通常の1行・`SEL`・`CLOS`・`IF`・`LOOP`・ブロック終端・別の`LABEL`)が来ても、`LABEL`自身の生成結果は変わらず、後続の行は`parseBody`のループが独立した次の1文として扱う。生成される Go コードは次のようになる。
 
 ```go
 afterSend:
 	;
 	select {
 	case v = <-ch:
-		goto gotval
+		result = "got"
 	default:
-		goto nothing
+		result = "empty"
 	}
 ```
 
-`;`(空文)は`SEL`/`CLOS`の前に限らず、全ての`LABEL`の直後に一律で入る。`goto afterSend`で戻ってきたときは空文を経由してそのまま次の文に入るため、意味的には問題ない。
+`;`(空文)は`SEL`/`CLOS`/`IF`/`LOOP`の前に限らず、全ての`LABEL`の直後に一律で入る。`goto afterSend`で戻ってきたときは空文を経由してそのまま次の文に入るため、意味的には問題ない。
 
-### `parseSelectBlock` — `SEL`本体の構築
+### `parseIfChain` — `IF`〜`ENDIF`の構築
 
-`SEL`の次の行から`ENDSEL`までを走査し、`CASESEND`/`CASERECV`/`DEFAULT`行をそれぞれ`ast.CommClause`に変換して`ast.SelectStmt`を組み立てる。各行は1行で完結する(内部にさらにブロックを持たない)ため、`parseBody`より単純な走査で済む。
+`IF`/`ELIF`1行分(条件1個だけを持つ)を読み、本体を`blockEnds = ["ELIF", "ELSE", "ENDIF"]`で`parseBody`に渡す。返ってきた`matched`によって分岐する、前方再帰の関数。
+
+```go
+func parseIfChain(lines []string, headerIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+    // lines[headerIdx] は "IF boolean1" または "ELIF boolean1"
+    cond, err := atomExpr(atoms[1], funcName, closureLevel, CatBool)
+    body, next, matched, err := parseBody(lines, headerIdx+1, funcName, closureLevel, []string{"ELIF", "ELSE", "ENDIF"})
+    ifStmt := &ast.IfStmt{Cond: cond, Body: &ast.BlockStmt{List: body}}
+
+    switch matched {
+    case "ENDIF":
+        return ifStmt, next, nil
+    case "ELIF":
+        // next-1 は今読み終えたELIF行そのもの。それを新たなIF/ELIF行として自分自身に再帰させる
+        elseStmt, next2, err := parseIfChain(lines, next-1, funcName, closureLevel)
+        ifStmt.Else = elseStmt
+        return ifStmt, next2, nil
+    default: // "ELSE"
+        elseBody, next2, _, err := parseBody(lines, next, funcName, closureLevel, []string{"ENDIF"})
+        ifStmt.Else = &ast.BlockStmt{List: elseBody}
+        return ifStmt, next2, nil
+    }
+}
+```
+
+Goの`ast.IfStmt.Else`は`*ast.IfStmt`(else-if)か`*ast.BlockStmt`(最終else)のどちらか一方しか持てないため、この関数が組み立てるのもちょうどその形になっている。`ELIF`が来た場合は次のIF/ELIFヘッダとして自分自身を再帰呼び出しし、その戻り値(`*ast.IfStmt`)をそのまま`Else`に代入する。`ELSE`が来た場合は、その本体を`blockEnds = ["ENDIF"]`だけで読む(`ELIF`/`ELSE`は終端候補に含まれない)。この状態で仮に`ELIF`/`ELSE`行が現れると、`parseBody`の「予約語だが今のblockEndsには無い」分岐が発火し、「ELSEの後にELIF/ELSEは使えない」という構文エラーになる。これが、`ELSE`は最大1個・必ず最後、という制約をコード上どこにも専用のカウンタや状態フラグを持たずに実現している理由である。
+
+### `parseLoopBlock` — `LOOP`〜`ENDLOOP`の構築
+
+```go
+func parseLoopBlock(lines []string, loopIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+    body, next, _, err := parseBody(lines, loopIdx+1, funcName, closureLevel, []string{"ENDLOOP"})
+    return &ast.ForStmt{Body: &ast.BlockStmt{List: body}}, next, nil
+}
+```
+
+`ast.ForStmt`は`Init`/`Cond`/`Post`をいずれも省略でき、`Body`だけを埋めれば`for { ... }`(無限ループ)になる。`BREAK`/`CONTINUE`(`parseSingleLine`が担当。前述)はGoの`break`/`continue`と同じく、構文的にどこに書いても組み立てられてしまう(`&ast.BranchStmt{Tok: token.BREAK}`に`Label`は付けない)。`LOOP`の外にあるかどうかの検証はAMIVM側では行わず、生成コードを`go/types`が「break is not in a loop」等で弾く。
+
+### `parseSelectBlock`/`parseCaseHeader` — `SEL`本体の構築
+
+`SEL`の次の行から`ENDSEL`までを走査し、`CASESEND`/`CASERECV`/`DEFAULT`ごとに`ast.CommClause`を組み立てて`ast.SelectStmt`にする。以前は各ケースが「1行で完結し`label`へ`goto`する」だけだったため単純な走査で済んでいたが、現在の仕様ではケース本体が`ENDSEL`か次のケースまで続く複数文のブロックになっているため、`parseBody`を`blockEnds = ["CASESEND", "CASERECV", "DEFAULT", "ENDSEL"]`で呼び出す形に作り替えた。
+
+```go
+func parseSelectBlock(lines []string, start int, funcName string, closureLevel int) (ast.Stmt, int, error) {
+    caseKeywords := []string{"CASESEND", "CASERECV", "DEFAULT", "ENDSEL"}
+    i := start
+    for {
+        if keyword(lines[i]) == "ENDSEL" {
+            return &ast.SelectStmt{Body: &ast.BlockStmt{List: clauses}}, i + 1, nil
+        }
+        comm, err := parseCaseHeader(lines[i], funcName, closureLevel) // Comm部分だけ(nilならDEFAULT)
+        body, next, _, err := parseBody(lines, i+1, funcName, closureLevel, caseKeywords)
+        clauses = append(clauses, &ast.CommClause{Comm: comm, Body: body})
+        i = next - 1 // 次のケースヘッダ(または ENDSEL)を、次のループの先頭で読む
+    }
+}
+```
+
+`i = next - 1`が肝で、`parseBody`が返す`next`は「見つかった終端行の次」を指すが、`SEL`のケースヘッダ(`CASESEND`等)は`IF`の`ELIF`と同様「終端であると同時に次のケースの開始でもある」ため、1つ戻って次のループの先頭で改めて読む。`parseCaseHeader`は`CASESEND`/`CASERECV`ではチャネル・送信値・代入先だけを`ast.SendStmt`/`ast.AssignStmt`として組み立て、`DEFAULT`では`nil`を返す(`ast.CommClause.Comm`が`nil`だと`select`の`default`節になる)。旧仕様にあった`label`引数の`checkKind(..., CatLabel)`・`labelGoName`・`gotoStmt`の呼び出しは全て無くなった。
 
 ### `parseStructBlock` — `STTYPE`本体の構築
 
@@ -406,7 +497,7 @@ afterSend:
 
 ## 6. 未使用変数の救済 — ネストしたブロックへの対応
 
-`_ = x`の挿入先探索(`insertBlankAfterDecl`)は、対象のVAR宣言文を関数のトップレベル文だけでなく、`IF`本体・`SEL`の各`CommClause`・`CLOS`(`func`リテラル)の内部まで**再帰的に**探索する。
+`_ = x`の挿入先探索(`insertBlankAfterDecl`)は、対象のVAR宣言文を関数のトップレベル文だけでなく、`IF`本体・`LOOP`本体・`SEL`の各`CommClause`・`CLOS`(`func`リテラル)の内部まで**再帰的に**探索する。
 
 ```go
 func findAndInsertBlank(list *[]ast.Stmt, varGoName string) bool {
@@ -431,6 +522,8 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
         // s.Body、s.Else を再帰的に見る
     case *ast.SelectStmt:
         // 各 CommClause.Body を再帰的に見る
+    case *ast.ForStmt:
+        return findAndInsertBlank(&s.Body.List, varGoName)
     case *ast.AssignStmt:
         // Rhs が *ast.FuncLit(CLOSの本体)なら、その Body.List を再帰的に見る
     }
@@ -441,6 +534,8 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
 `CLOS`は`func`リテラルとして独立したブロックスコープを作るため、これを省略すると`CLOS`本体で未使用になった`VAR`変数(`fn.Body.List`の直接の要素ではなく、`AssignStmt.Rhs`の`*ast.FuncLit.Body.List`の中にある)を発見できず、命名規則ベースの絞り込み(所属関数の特定)は成功してもVAR宣言そのものが見つからない、という状態に陥る。この場合の安全網として、該当箇所が見つからなければ全関数の末尾に`_ = x`を追加するフォールバックが残っているが、通常は上記の再帰探索で正しい挿入位置が見つかる。
 
 `insertBlankInNested`の`*ast.AssignStmt`ケースは深さの上限を持たない再帰呼び出しのため、`CLOS`のネスト対応(3節参照)にあたってこの関数自体は変更不要だった。`CLOS`が2重・3重にネストしていても、`*ast.FuncLit`の中にさらに`*ast.FuncLit`を含む`AssignStmt`が現れるだけで、`findAndInsertBlank`→`insertBlankInNested`→`findAndInsertBlank`...という呼び出しの繰り返しがネストの深さ分だけ自然に積み重なる。
+
+一方`LOOP`(`ast.ForStmt`)を導入したときは、この関数に`*ast.ForStmt`のケースを**追加する必要があった**(`CLOS`とは対照的に、既存のswitchには元々`ForStmt`という形自体が存在しなかったため、省略を気にする以前にケースそのものが無かった)。追加を忘れると、`LOOP`本体で未使用になった`VAR`はどのケースにもマッチせず`insertBlankInNested`が`false`を返し続け、`appendBlankAssignsTargeted`のフォールバック(該当関数の末尾に`_ = x`を追加)に落ちる。フォールバックはフォールバックとして正しく機能はするが、戻り値のある関数だと`return`の後に文が続くことになり`missing return`を誘発しうる、という設計上避けたい経路である(1節・4節参照)。
 
 なお、Goの言語仕様上「未使用」でエラーになるのは`var`宣言されたローカル変数のみで、関数パラメータ(`$N`)やクロージャー引数(`&N`)は未使用でもエラーにならないため、この救済処理の対象になるのは常に`VAR`由来の変数だけである。
 
@@ -540,8 +635,9 @@ func deriveOutputPath(irPath string) string {
 - **`:`区切りの分割ロジックを`splitColon`に集約**し、`CALL`/`FUNC`/`FNTYPE`/`CLOS`で共有する
 - **`LABEL`は次の行が何であるかに関わらず常に`label: ;`を生成する仕様にした**ことで、「次の行を先読みして挙動を変える」処理が不要になり、`LABEL`は他の1行命令と全く同じに扱える
 - **意味の正しさの検証は一切自前で持たず、`go/types`に委ねる**
-- **ブロック構造(`FUNC`/`SEL`/`CLOS`/`STTYPE`)は専用の走査関数で対応**し、フラットな行処理では表現できない部分だけを局所化している
-- **未使用変数の救済は、命名規則による所属関数の特定(文字列分割)と、ネストしたブロックへの再帰探索を組み合わせる**ことで、`CLOS`内の変数も含めて正しい挿入位置を特定する
+- **ブロック構造(`FUNC`/`SEL`/`CLOS`/`STTYPE`/`IF`/`LOOP`)は専用の走査関数で対応**し、フラットな行処理では表現できない部分だけを局所化している
+- **`parseBody`の終端キーワードを単一の`string`ではなく`[]string`に一般化**し、実際にどれで止まったか(`matched`)も返すようにしたことで、`IF`の`ELIF`/`ELSE`/`ENDIF`・`SEL`の`CASESEND`/`CASERECV`/`DEFAULT`/`ENDSEL`のような「複数の終端候補を持つブロック」も同じ`parseBody`だけで表現できる。想定外の終端キーワード(`ELSE`の後の`ELIF`等)は「予約語だが今のblockEndsに無い」として`parseBody`が構文エラーにする
+- **未使用変数の救済は、命名規則による所属関数の特定(文字列分割)と、ネストしたブロックへの再帰探索を組み合わせる**ことで、`CLOS`/`LOOP`内の変数も含めて正しい挿入位置を特定する
 - **amivmコマンドの責務はGoソースファイルの出力までとし、`go build`による実行ファイル生成は行わない**。CLI引数(`-o`/`-v`/`-i`、いずれも長形式あり)の解釈(`parseArgs`)と出力パイプライン(`generateOutput`)を分離し、`verbose`フラグ1つで標準出力の有無を一括制御する
 
 ## 既知の簡略化・注意点

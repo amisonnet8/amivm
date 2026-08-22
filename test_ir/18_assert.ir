@@ -1,0 +1,18 @@
+// ASSERT(型アサーション)のテスト。multi2省略時は単一形(失敗するとpanicする)、
+// 指定時は2値形(失敗してもpanicせずokがfalseになる)
+FUNC	!main	:
+	VAR	%x	^any
+	VAR	%n	^int
+	VAR	%s	^string
+	VAR	%ok	^bool
+
+	SET	%x	42
+
+	// 単一形: %xの実際の型(int)と一致するので成功する
+	ASSERT	%n	%x	^int
+
+	// 2値形: %xの実際の型(int)とは異なるので失敗するが、panicせずokがfalseになる
+	ASSERT	%s	%ok	%x	^string
+
+	RET
+ENDFUNC
