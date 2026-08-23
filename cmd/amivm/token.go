@@ -37,6 +37,9 @@ const (
 	// > (構造体フィールド名)
 	KField
 
+	// < (メソッド名)
+	KMethod
+
 	// ^ (型。単純/セレクタ/ポインタ/配列の4系統×セレクタ有無)
 	KType
 	KTypeSel
@@ -157,6 +160,8 @@ func classify(tok string) Atom {
 		return classifyLabel(tok, tok[1:])
 	case '>':
 		return classifyField(tok, tok[1:])
+	case '<':
+		return classifyMethod(tok, tok[1:])
 	default:
 		return Atom{Kind: KInvalid, Raw: tok}
 	}
@@ -202,6 +207,13 @@ func classifyGlobal(raw, body string) Atom {
 func classifyField(raw, body string) Atom {
 	if m := reIdentOnly.FindStringSubmatch(body); m != nil {
 		return Atom{Kind: KField, Raw: raw, A: m[1]}
+	}
+	return Atom{Kind: KInvalid, Raw: raw}
+}
+
+func classifyMethod(raw, body string) Atom {
+	if m := reIdentOnly.FindStringSubmatch(body); m != nil {
+		return Atom{Kind: KMethod, Raw: raw, A: m[1]}
 	}
 	return Atom{Kind: KInvalid, Raw: raw}
 }

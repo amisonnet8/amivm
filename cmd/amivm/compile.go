@@ -43,9 +43,9 @@ func blankAssignStmt(name string) ast.Stmt {
 	}
 }
 
-// declaresVarDirect は、文がVAR宣言(ast.DeclStmt, token.VAR)として指定名を直接
-// (ネストしたブロックを覗かずに)宣言しているかを判定する。LABELで包まれたVAR宣言
-// (*ast.LabeledStmt)も見る。
+// declaresVarDirect は、文がVAR宣言(ast.DeclStmt, token.VAR)またはMETHODの
+// :=宣言(ast.AssignStmt, token.DEFINE)として指定名を直接(ネストしたブロックを
+// 覗かずに)宣言しているかを判定する。LABELで包まれた宣言(*ast.LabeledStmt)も見る。
 func declaresVarDirect(stmt ast.Stmt, varGoName string) bool {
 	switch s := stmt.(type) {
 	case *ast.DeclStmt:
@@ -62,6 +62,17 @@ func declaresVarDirect(stmt ast.Stmt, varGoName string) bool {
 				if n.Name == varGoName {
 					return true
 				}
+			}
+		}
+	case *ast.AssignStmt:
+		// METHODが生成するlocal := variable.methodのような:=宣言。VARを経由しないため、
+		// ast.DeclStmtケースだけでは発見できない。
+		if s.Tok != token.DEFINE {
+			return false
+		}
+		for _, lhs := range s.Lhs {
+			if id, ok := lhs.(*ast.Ident); ok && id.Name == varGoName {
+				return true
 			}
 		}
 	case *ast.LabeledStmt:

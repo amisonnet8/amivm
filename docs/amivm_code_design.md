@@ -107,7 +107,7 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 }
 ```
 
-ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`BREAK`/`CONTINUE`/`ASSERT`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`MSET`/`MGET`/`MPKEYS`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。`BREAK`/`CONTINUE`もオペランド無しの1行命令で、`&ast.BranchStmt{Tok: token.BREAK}`/`token.CONTINUE`を返すだけ(`LOOP`の中かどうかの検証はしない。`go/types`が「break is not in a loop」等で検出する)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`/`IF`/`LOOP`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する(`IF`は旧仕様の単一行`IF boolean1 label`を廃止し、`ELIF`/`ELSE`/`ENDIF`を伴うブロック構造になったため、`parseSingleLine`からは外れた)。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
+ここで扱うのは関数本体内で1行完結する命令(`VAR`/`SET`/`ASET`/`AGET`/`PSET`/`PGET`/`ADDR`/四則演算・ビット演算・シフト・論理・比較演算/`LABEL`/`GOTO`/`BREAK`/`CONTINUE`/`ASSERT`/`RET`/`CALL`/`DEFER`/`SPAWN`/`CHMAKE`/`SLMAKE`/`MPMAKE`/`CHSEND`/`CHRECV`/`CONCAT`/`SLICE`/`FSET`/`FGET`/`METHOD`/`MSET`/`MGET`/`MPKEYS`)。`LABEL`は`label: ;`という固定の形を生成するだけの1行命令であり、他の1行命令と全く同じにここで扱える(先読みは不要。5節参照)。`BREAK`/`CONTINUE`もオペランド無しの1行命令で、`&ast.BranchStmt{Tok: token.BREAK}`/`token.CONTINUE`を返すだけ(`LOOP`の中かどうかの検証はしない。`go/types`が「break is not in a loop」等で検出する)。複数行にまたがる`FUNC`/`SEL`/`CLOS`/`STTYPE`/`IF`/`LOOP`はここでは扱わず、5節の`parseBody`/`buildProgram`側で処理する(`IF`は旧仕様の単一行`IF boolean1 label`を廃止し、`ELIF`/`ELSE`/`ENDIF`を伴うブロック構造になったため、`parseSingleLine`からは外れた)。`GVAR`・`CHTYPE`/`SLTYPE`/`MPTYPE`/`FNTYPE`もトップレベル専用のため、`buildProgram`でのみ処理する。
 
 ## 3. トークンの分類体系(Kind)
 
@@ -141,6 +141,9 @@ const (
     // > (構造体フィールド名)
     KField
 
+    // < (メソッド名)
+    KMethod
+
     // ^ (型。単純/セレクタ/ポインタ/配列の4系統×セレクタ有無)
     KType
     KTypeSel
@@ -162,7 +165,7 @@ const (
 )
 ```
 
-`KInvalid`を含めて30種類(識別子系は5・型系は8・関数系は4・ラベル1・フィールド1・リテラル/記号系11)。以前(33種類、うち多くが配列/スライス/チャネル型のインライン形やパラメータの複合形だった)から純減している。理由は、コンテナ型(チャネル/スライス/マップ/構造体/関数型)のインライン埋め込みが廃止され`TYPE`系命令による`deftype`参照に一本化されたため(型側のKindも配列型4パターンのみに削減)、および識別子の複合形が専用命令に分離されたため。
+`KInvalid`を含めて31種類(識別子系は5・型系は8・関数系は4・ラベル1・フィールド1・メソッド1・リテラル/記号系11)。以前(33種類、うち多くが配列/スライス/チャネル型のインライン形やパラメータの複合形だった)から純減している。理由は、コンテナ型(チャネル/スライス/マップ/構造体/関数型)のインライン埋め込みが廃止され`TYPE`系命令による`deftype`参照に一本化されたため(型側のKindも配列型4パターンのみに削減)、および識別子の複合形が専用命令に分離されたため。
 
 `Atom`は`A`, `B`, `C`という3つの汎用フィールドを持ち、Kindごとに意味が変わる(例: `KArrTypeSel`なら`A`=サイズ, `B`=要素の左側, `C`=要素の右側)。フィールド名を都度専用のものに増やすのではなく、コメントで意味を明記する形にして構造体自体は小さく保っている。
 
@@ -245,6 +248,7 @@ const (
     CatType
     CatDeftype
     CatField
+    CatMethod
     CatPoint
     CatWhole
     CatFromTo
@@ -278,7 +282,7 @@ m[CatNumber] = number
 
 ### `checkKind` — 検証のみで組み立てを伴わない場合
 
-`VAR`/`GVAR`の変数名、`LABEL`/`GOTO`/`IF`/`CASESEND`/`CASERECV`/`DEFAULT`のラベル、`FUNC`の関数定義名、`TYPE`系命令の`deftype`名など、「Kindがカテゴリに属するかどうかだけ確認したい(組み立てた`ast.Expr`は使わない)」箇所がある。これらを`atomExpr`経由で行うと2つの問題があった。
+`VAR`/`GVAR`の変数名、`LABEL`/`GOTO`のラベル、`FUNC`の関数定義名、`TYPE`系命令の`deftype`名など、「Kindがカテゴリに属するかどうかだけ確認したい(組み立てた`ast.Expr`は使わない)」箇所がある。これらを`atomExpr`経由で行うと2つの問題があった。
 
 1. `%xxx`(`KLocal`)の`atomToExpr`は`funcName`が空だとエラーを返す実装になっているため、検証のためだけに`funcName: ""`を渡すと(実際の変数解決とは無関係に)常に失敗する
 2. ラベル(`KLabel`)は`atomToExpr`にKind分岐が無く(ラベル名の取得は別途`labelGoName`が担う)、`default`節に落ちて常に失敗する
@@ -497,7 +501,26 @@ func parseSelectBlock(lines []string, start int, funcName string, closureLevel i
 
 ## 6. 未使用変数の救済 — ネストしたブロックへの対応
 
-`_ = x`の挿入先探索(`insertBlankAfterDecl`)は、対象のVAR宣言文を関数のトップレベル文だけでなく、`IF`本体・`LOOP`本体・`SEL`の各`CommClause`・`CLOS`(`func`リテラル)の内部まで**再帰的に**探索する。
+`_ = x`の挿入先探索(`insertBlankAfterDecl`)は、対象の宣言文(`VAR`由来の`var`宣言、または`METHOD`由来の`:=`宣言)を関数のトップレベル文だけでなく、`IF`本体・`LOOP`本体・`SEL`の各`CommClause`・`CLOS`(`func`リテラル)の内部まで**再帰的に**探索する。
+
+`declaresVarDirect(stmt ast.Stmt, varGoName string) bool`が「この文が`varGoName`をこの場で宣言しているか」を判定する。対象は2種類ある。
+
+```go
+func declaresVarDirect(stmt ast.Stmt, varGoName string) bool {
+    switch s := stmt.(type) {
+    case *ast.DeclStmt:
+        // VARの var varGoName type1。ast.GenDecl(Tok: token.VAR)のNamesを見る
+    case *ast.AssignStmt:
+        // METHODの varGoName := variable.method。Tok != token.DEFINEなら対象外、
+        // Lhsに varGoName という *ast.Ident が含まれていれば宣言とみなす
+    case *ast.LabeledStmt:
+        return declaresVarDirect(s.Stmt, varGoName)
+    }
+    return false
+}
+```
+
+`*ast.AssignStmt`のケースが`METHOD`対応で追加した部分である。Goの「未使用」エラーは`var`宣言だけでなく`:=`による短い変数宣言にも等しくかかるため、`METHOD`が生成する`local := variable.method`が未使用になった場合も同じ救済が必要になる。`Tok`を`token.DEFINE`に限定しているのは、`CLOS`の代入文(`local = func(...) {...}`、`Tok`は`token.ASSIGN`)を誤って「宣言」と判定しないため。
 
 ```go
 func findAndInsertBlank(list *[]ast.Stmt, varGoName string) bool {
@@ -537,7 +560,7 @@ func insertBlankInNested(stmt ast.Stmt, varGoName string) bool {
 
 一方`LOOP`(`ast.ForStmt`)を導入したときは、この関数に`*ast.ForStmt`のケースを**追加する必要があった**(`CLOS`とは対照的に、既存のswitchには元々`ForStmt`という形自体が存在しなかったため、省略を気にする以前にケースそのものが無かった)。追加を忘れると、`LOOP`本体で未使用になった`VAR`はどのケースにもマッチせず`insertBlankInNested`が`false`を返し続け、`appendBlankAssignsTargeted`のフォールバック(該当関数の末尾に`_ = x`を追加)に落ちる。フォールバックはフォールバックとして正しく機能はするが、戻り値のある関数だと`return`の後に文が続くことになり`missing return`を誘発しうる、という設計上避けたい経路である(1節・4節参照)。
 
-なお、Goの言語仕様上「未使用」でエラーになるのは`var`宣言されたローカル変数のみで、関数パラメータ(`$N`)やクロージャー引数(`&N`)は未使用でもエラーにならないため、この救済処理の対象になるのは常に`VAR`由来の変数だけである。
+なお、Goの言語仕様上「未使用」でエラーになるのはローカル変数の宣言(`var`宣言・`:=`による短い変数宣言のどちらも)のみで、関数パラメータ(`$N`)やクロージャー引数(`&N`)は未使用でもエラーにならないため、この救済処理の対象になるのは常に`VAR`または`METHOD`由来の変数だけである。
 
 ## 7. Goソース出力パイプライン
 
@@ -637,7 +660,8 @@ func deriveOutputPath(irPath string) string {
 - **意味の正しさの検証は一切自前で持たず、`go/types`に委ねる**
 - **ブロック構造(`FUNC`/`SEL`/`CLOS`/`STTYPE`/`IF`/`LOOP`)は専用の走査関数で対応**し、フラットな行処理では表現できない部分だけを局所化している
 - **`parseBody`の終端キーワードを単一の`string`ではなく`[]string`に一般化**し、実際にどれで止まったか(`matched`)も返すようにしたことで、`IF`の`ELIF`/`ELSE`/`ENDIF`・`SEL`の`CASESEND`/`CASERECV`/`DEFAULT`/`ENDSEL`のような「複数の終端候補を持つブロック」も同じ`parseBody`だけで表現できる。想定外の終端キーワード(`ELSE`の後の`ELIF`等)は「予約語だが今のblockEndsに無い」として`parseBody`が構文エラーにする
-- **未使用変数の救済は、命名規則による所属関数の特定(文字列分割)と、ネストしたブロックへの再帰探索を組み合わせる**ことで、`CLOS`/`LOOP`内の変数も含めて正しい挿入位置を特定する
+- **未使用変数の救済は、命名規則による所属関数の特定(文字列分割)と、ネストしたブロックへの再帰探索を組み合わせる**ことで、`CLOS`/`LOOP`内の変数、`METHOD`が`:=`で宣言した変数も含めて正しい挿入位置を特定する
+- **代入は一貫して`=`(既存変数への代入)、`METHOD`だけ例外的に`:=`(新規宣言)を使う**。`FNTYPE`で宣言した関数型がGoの実際のメソッド値の型と厳密に一致しないケースがあるため、`METHOD`は型を明示的に宣言せず`:=`でGoに推論させる(経緯は`amivm_instruction_spec.md`16節参照)。この非対称性を安全にするため、`METHOD`の代入先カテゴリ(`CatVa`)は`%xxx`のみに絞り、`:=`の左辺に使えない形(`$N`/`&N`/`@xxx`)を構文レベルで弾く
 - **amivmコマンドの責務はGoソースファイルの出力までとし、`go build`による実行ファイル生成は行わない**。CLI引数(`-o`/`-v`/`-i`、いずれも長形式あり)の解釈(`parseArgs`)と出力パイプライン(`generateOutput`)を分離し、`verbose`フラグ1つで標準出力の有無を一括制御する
 
 ## 既知の簡略化・注意点

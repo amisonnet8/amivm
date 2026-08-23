@@ -20,6 +20,7 @@ const (
 	CatType
 	CatDeftype
 	CatField
+	CatMethod
 	CatPoint
 	CatWhole
 	CatFromTo
@@ -38,7 +39,7 @@ var categoryLabel = map[Category]string{
 	CatVa: "VAR変数名", CatGv: "GVAR変数名",
 	CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
 	CatVariable: "変数参照", CatType: "型", CatDeftype: "定義型",
-	CatField: "構造体フィールド名", CatPoint: "ADDRのフィールド/添字対象",
+	CatField: "構造体フィールド名", CatMethod: "メソッド名", CatPoint: "ADDRのフィールド/添字対象",
 	CatWhole: "0以上の整数", CatFromTo: "スライス範囲(from/to)",
 	CatInt: "整数", CatNumber: "数値", CatBool: "真偽値",
 	CatSlice: "スライス/文字列", CatOrder: "順序比較値", CatValue: "値",
@@ -90,6 +91,7 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	m[CatType] = typeKindsAll
 	m[CatDeftype] = kindSet(KType)
 	m[CatField] = kindSet(KField)
+	m[CatMethod] = kindSet(KMethod)
 
 	whole := mergeKinds(identRefFull, kindSet(KZero, KPosInt, KRune))
 	m[CatWhole] = whole

@@ -112,6 +112,8 @@ func atomToExpr(a Atom, funcName string, closureLevel int) (ast.Expr, error) {
 
 	case KField:
 		return ast.NewIdent(a.A), nil
+	case KMethod:
+		return ast.NewIdent(a.A), nil
 
 	case KType:
 		return ast.NewIdent(a.A), nil

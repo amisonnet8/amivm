@@ -1,0 +1,19 @@
+// METHOD(:=によるメソッド値の取得)のテスト。FNTYPEで宣言した関数型では、
+// Goの実際のメソッド値の型と完全一致せず代入できないケースがあるため、
+// :=によるGoの型推論に任せる。METHODの代入先(local)はVARで事前宣言しない。
+FUNC	!main	:
+	VAR	%f	^*os.File
+	VAR	%err	^error
+	VAR	%closeErr	^error
+
+	CALL	%f	%err	:	?os.Open	"go.mod"
+
+	// 使うメソッド値
+	METHOD	%closeFn	%f	<Close
+	CALL	%closeErr	:	%closeFn
+
+	// 使わないメソッド値(未使用変数の自己修復が:=宣言にも効くことのテスト)
+	METHOD	%nameFn	%f	<Name
+
+	RET
+ENDFUNC

@@ -111,6 +111,8 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 		return parseFset(rest, funcName, closureLevel)
 	case "FGET":
 		return parseFget(rest, funcName, closureLevel)
+	case "METHOD":
+		return parseMethod(rest, funcName, closureLevel)
 	case "MSET":
 		return parseMset(rest, funcName, closureLevel)
 	case "MGET":
@@ -666,6 +668,33 @@ func parseFget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
+		Rhs: []ast.Expr{&ast.SelectorExpr{X: variable, Sel: ast.NewIdent(atoms[2].A)}},
+	}, nil
+}
+
+// parseMethod は「METHOD local variable method」を解釈する
+// (local := variable.method)。localはVARで事前宣言しない。FNTYPEで宣言した
+// 関数型とGoの実際のメソッド値の型が(概念上は同じでも)完全一致せず代入できない
+// ケースがあるため、:=によるGoの型推論に任せることでこれを回避する。localが
+// CatVa(%xxx_123のみ)なのはこの:=の意味論と整合させるため($N/&N/@xxxのような
+// 既存の宣言済み識別子は:=の左辺に使えない)。
+func parseMethod(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
+	if err := expectArgs("METHOD", atoms, 3); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatVa)
+	if err != nil {
+		return nil, fmt.Errorf("METHODの代入先が不正です: %w", err)
+	}
+	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
+	if err != nil {
+		return nil, fmt.Errorf("METHODの対象が不正です: %w", err)
+	}
+	if atoms[2].Kind != KMethod {
+		return nil, fmt.Errorf("METHODのメソッド名が不正です: %s", atoms[2].Raw)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.DEFINE,
 		Rhs: []ast.Expr{&ast.SelectorExpr{X: variable, Sel: ast.NewIdent(atoms[2].A)}},
 	}, nil
 }
