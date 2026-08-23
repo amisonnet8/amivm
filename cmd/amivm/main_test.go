@@ -75,8 +75,7 @@ func TestParseArgs_ImportErrors(t *testing.T) {
 //
 // このシナリオ(まだどこからも参照されていない別モジュール内パッケージ)は、
 // goimportsの自動推測(imports.Process)だけに頼ると失敗する・不安定になることが
-// あるため(docs/amivm_code_design.md参照)、-i/--importによる明示指定で確実に
-// 解決できることを確認する。
+// あるため、-i/--importによる明示指定で確実に解決できることを確認する。
 func TestGenerateOutput_ImportFlagResolvesNeverBeforeReferencedPackage(t *testing.T) {
 	dir := t.TempDir()
 

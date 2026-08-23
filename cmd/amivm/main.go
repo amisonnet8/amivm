@@ -95,10 +95,9 @@ func parseArgs(args []string) (irPath, outPath string, verbose bool, importMap m
 // injectExplicitImports は、-i/--importで指定されたインポートをfile.Declsの先頭に明示的な
 // import宣言として追加する。goimports(imports.Process)は識別子だけからimportパスを
 // 正しく推測できないことがあるため(標準ライブラリや既に参照済みのパッケージ以外では
-// 信頼できない。docs/amivm_code_design.md「既知の別課題」参照)、呼び出し側が既知の
-// マッピングを明示的に渡せるようにする。ここで追加したエイリアスのうち実際にコード内で
-// 使われていないものは、後段のimports.Processが通常の未使用import除去と同じ仕組みで
-// 自動的に取り除く。
+// 信頼できない)、呼び出し側が既知のマッピングを明示的に渡せるようにする。ここで追加した
+// エイリアスのうち実際にコード内で使われていないものは、後段のimports.Processが通常の
+// 未使用import除去と同じ仕組みで自動的に取り除く。
 func injectExplicitImports(file *ast.File, importMap map[string]string) {
 	if len(importMap) == 0 {
 		return

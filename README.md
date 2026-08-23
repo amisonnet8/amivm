@@ -134,7 +134,7 @@ Instructions are grouped roughly into:
 
 Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value.
 
-The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), see [`docs/amivm_code_design.md`](docs/amivm_code_design.md).
+The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), read the source under `cmd/amivm/` directly — it's commented throughout.
 
 ## Calling your own Go code
 
@@ -189,7 +189,6 @@ cmd/amivm/
 docs/
   amivm_spec.md               the authoritative specification (project overview + full IR reference)
   amivm_instruction_spec.md   annotated walkthrough of amivm_spec.md, with design rationale
-  amivm_code_design.md        how the compiler is put together internally
 Makefile                    build/test/clean tasks (`make help` for the full list)
 test_ir/                    example IR programs, one file per instruction group
 .github/workflows/test.yml  CI: gofmt/go vet/go test/make test on push and PR

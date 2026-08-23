@@ -26,13 +26,14 @@ Goの並行処理(goroutine/channel)を中間言語に直接取り込んでい�
 |---|---|
 | `docs/amivm_spec.md` | **唯一の正確な仕様。** プロジェクト概要+IR命令セットの全体を体系立てて記載(旧`PJ.txt`+`IR.txt`の統合・後継。両ファイルは削除済み) |
 | `docs/amivm_instruction_spec.md` | `amivm_spec.md`と同じ内容を、設計判断の理由・変更の経緯まで含めて解説したもの |
-| `docs/amivm_code_design.md` | コンパイラ本体の内部実装(トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理・CLI引数解釈など)の設計メモ。ファイル構成は次節「実装のファイル構成」参照 |
 | `README.md` / `README_ja.md` | GitHub向けの導入ドキュメント(英語版/日本語版) |
 | `test_ir/` | 命令カテゴリ別のサンプルIR。新しい命令・構文を実装したら対応するファイルを追加・更新して`go build`まで通すこと |
 | `CLAUDE.md` | 本ファイル。AIによる開発支援のための規約・注意点 |
 | `.github/workflows/test.yml` | GitHub Actions。push/PR時に`gofmt`・`go vet`・`go test`・`make test`(test_ir一括検証)を自動実行する |
 
 以降の節で単に`amivm_spec.md`のようにファイル名だけで参照している箇所は、いずれも`docs/`配下を指す。
+
+**`docs/amivm_code_design.md`(コンパイラ内部実装の設計メモ)は削除済みで、復活させない。** 仕様変更のたびに実装詳細(関数シグネチャ・コードスニペット等)まで追随させる修正コストが見合わないと判断されたため。コンパイラ内部の実装詳細を知りたい場合は`cmd/amivm/`のソースコード(コメント含む)を直接参照すること。新しいドキュメントで同種の内容を作らないこと。
 
 ## 仕様の正(source of truth)
 
@@ -58,7 +59,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 - ファイル読み込み失敗・IRパースエラー・型チェック失敗などのエラーは`-v`/`--verbose`の有無に関わらず常に出力する
 - `go build`による実行ファイル生成は行わない(前述のとおり別工程)
 
-詳細は`amivm_code_design.md`のエントリポイント節を参照。
+詳細は`cmd/amivm/main.go`を参照。
 
 ## 識別子プレフィックス体系(要点)
 
@@ -101,7 +102,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 **「Kindの検証だけ」のつもりで`atomExpr`を使うと落とし穴がある。** `atomExpr(a, funcName, cat)`はカテゴリ検証の後に必ず`atomToExpr`を呼んで`ast.Expr`を組み立てる。これを「ラベル名やVAR宣言名がそのカテゴリとして妥当か確認したいだけ」の箇所で使うと、(1) `%xxx`(`KLocal`)は`funcName`が空だと組み立てに失敗する、(2) ラベル(`KLabel`)は`atomToExpr`にKind分岐が無く`default`節に落ちて必ず失敗する、という2つの理由で、検証のはずが常にエラーになる。実際に`VAR`と`GOTO`がこれで常時失敗するバグが本番コードに入っていた(実装時点では未検証で見逃されていた)。組み立てた式が不要で検証だけしたい箇所では、Kind判定のみを行い`ast.Expr`を組み立てない`checkKind(a, cat)`を使うこと。
 
-**旧`compileOnce`の`types.Config{Importer: importer.Default()}`はGoモジュールを一切理解しない。** `importer.Default()`はGOROOT配下の標準ライブラリしか解決できないGOPATH時代のインポーターであり、生成したコードが利用側言語実装(xxlang等)の独自ランタイムライブラリのような、標準ライブラリ以外のパッケージを参照すると、実際には`go build`で正しくビルドできるにもかかわらずamivm内部の型チェックだけが「could not import」で失敗していた。加えて生成した1ファイルだけを単独でチェックしていたため、同じディレクトリ・同じpackageの手書きファイルで定義された識別子も常に「undefined」になっていた。`golang.org/x/tools/go/packages`(`go list`を使う、モジュール対応のパッケージローダー)ベースの`typeCheck`関数に置き換えて解決した(詳細は`docs/amivm_code_design.md`7節)。**ただし`imports.Process`(goimports)がbareな識別子(`?xxrt.Helper`等)から正しいimportパスを自動推測する部分は今回の修正の対象外で、別の問題として残っている。** 標準ライブラリや既に参照済みのパッケージは高確率で解決できるが、まだどこからも参照されていない新規パッケージに対しては、importの挿入自体に失敗する、あるいは誤ったパスを挿入することがある(実際に`github.com/google/uuid`のような実在パッケージでも、bareな`uuid.New()`という参照だけからは`import "uuid"`という誤ったパスが挿入される事例を確認した)。この現象に依存するテスト(`cmd/amivm/compile_test.go`の`TestTypeCheck_CrossPackageSameModule`)は、`typeCheck`を直接呼んでimport文を含む完成済みソースを渡す形で書き、goimportsの推測に依存しない構成にしている。**この推測の不確実性を回避するため、CLIに`-i`/`--import <名前>=<importパス>`オプションを追加した**(前述の「CLIコマンド仕様」節参照)。呼び出し側(xxlangのビルドパイプライン等)が既知のマッピングを明示的に渡せば、goimportsは推測をせず、そのimportをそのまま使う。
+**旧`compileOnce`の`types.Config{Importer: importer.Default()}`はGoモジュールを一切理解しない。** `importer.Default()`はGOROOT配下の標準ライブラリしか解決できないGOPATH時代のインポーターであり、生成したコードが利用側言語実装(xxlang等)の独自ランタイムライブラリのような、標準ライブラリ以外のパッケージを参照すると、実際には`go build`で正しくビルドできるにもかかわらずamivm内部の型チェックだけが「could not import」で失敗していた。加えて生成した1ファイルだけを単独でチェックしていたため、同じディレクトリ・同じpackageの手書きファイルで定義された識別子も常に「undefined」になっていた。`golang.org/x/tools/go/packages`(`go list`を使う、モジュール対応のパッケージローダー)ベースの`typeCheck`関数に置き換えて解決した(詳細は`cmd/amivm/compile.go`の`typeCheck`を参照)。**ただし`imports.Process`(goimports)がbareな識別子(`?xxrt.Helper`等)から正しいimportパスを自動推測する部分は今回の修正の対象外で、別の問題として残っている。** 標準ライブラリや既に参照済みのパッケージは高確率で解決できるが、まだどこからも参照されていない新規パッケージに対しては、importの挿入自体に失敗する、あるいは誤ったパスを挿入することがある(実際に`github.com/google/uuid`のような実在パッケージでも、bareな`uuid.New()`という参照だけからは`import "uuid"`という誤ったパスが挿入される事例を確認した)。この現象に依存するテスト(`cmd/amivm/compile_test.go`の`TestTypeCheck_CrossPackageSameModule`)は、`typeCheck`を直接呼んでimport文を含む完成済みソースを渡す形で書き、goimportsの推測に依存しない構成にしている。**この推測の不確実性を回避するため、CLIに`-i`/`--import <名前>=<importパス>`オプションを追加した**(前述の「CLIコマンド仕様」節参照)。呼び出し側(xxlangのビルドパイプライン等)が既知のマッピングを明示的に渡せば、goimportsは推測をせず、そのimportをそのまま使う。
 
 ## 設計方針(踏襲すること)
 
@@ -133,7 +134,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 ## 実装のファイル構成
 
-コンパイラ本体は`cmd/amivm/`配下の単一パッケージ(`package main`)のまま、処理の層ごとに複数ファイルへ分割されている。分割の経緯・各層の詳細は`amivm_code_design.md`を参照。
+コンパイラ本体は`cmd/amivm/`配下の単一パッケージ(`package main`)のまま、処理の層ごとに複数ファイルへ分割されている。
 
 | ファイル | 役割 |
 |---|---|
@@ -159,5 +160,5 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 1. `amivm_spec.md`の命令一覧・カテゴリ表・Kind一覧を正として実装する
 2. 実装したら実際に`go build`(および可能なら生成したGoコードの`go build`・実行)で動作確認する。**このプロジェクトは「動かして初めて見つかるバグ」が実際に複数回発生している**(前節参照)。ロジック上正しそうに見えても、必ず`test_ir/`のサンプルを通して確認すること(`make test`で一括検証できる。生成物は一時ディレクトリに書き出すため、リポジトリ直下を汚さない)
 3. `amivm_spec.md`と矛盾する挙動を見つけたら、まず`amivm_spec.md`側の記述を疑い、仕様として確定してからコードを直す
-4. 仕様(`amivm_spec.md`)を変更したら、`amivm_instruction_spec.md`・`amivm_code_design.md`・README・`test_ir/`のうち影響を受ける箇所も同じタイミングで更新する(ドキュメント間の不整合を残さない)
+4. 仕様(`amivm_spec.md`)を変更したら、`amivm_instruction_spec.md`・README・`test_ir/`のうち影響を受ける箇所も同じタイミングで更新する(ドキュメント間の不整合を残さない)
 5. `.github/workflows/test.yml`によりpush/PR時に`gofmt`・`go vet`・`go test`・`make test`がGitHub Actionsで自動実行される。ローカルでこれらを一通り確認してからpushすること(CIで初めて失敗に気づくのは避ける)

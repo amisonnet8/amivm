@@ -134,7 +134,7 @@ Hello, AMIVM!
 
 メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。
 
-**唯一の正確な仕様は[`docs/amivm_spec.md`](docs/amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md)、コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)の解説が[`docs/amivm_code_design.md`](docs/amivm_code_design.md)にあります。
+**唯一の正確な仕様は[`docs/amivm_spec.md`](docs/amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md)です。コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)を知りたい場合は、コメントを充実させてある`cmd/amivm/`配下のソースコードを直接参照してください。
 
 ## 独自のGoコードを呼ぶ
 
@@ -189,7 +189,6 @@ cmd/amivm/
 docs/
   amivm_spec.md               唯一の正確な仕様(プロジェクト概要+IR仕様の全体)
   amivm_instruction_spec.md   amivm_spec.mdの解説版(設計判断の理由まで含む)
-  amivm_code_design.md        コンパイラ内部の設計メモ
 Makefile                    ビルド・テスト・クリーンアップ用タスク(`make help`で一覧表示)
 test_ir/                    命令カテゴリ別のサンプルIR
 .github/workflows/test.yml  CI: push/PR時にgofmt/go vet/go test/make testを実行
