@@ -572,8 +572,26 @@ func parseInterfaceBlock(lines []string, start int) (*ast.InterfaceType, int, er
 	return nil, 0, fmt.Errorf("no matching ENDINTYPE found")
 }
 
-// parseChType/parseSlType/parseMpType/parseFnType はトップレベルのTYPE系宣言
-// (CHTYPE/SLTYPE/MPTYPE/FNTYPE)を1行から*ast.Declに変換する。
+// parseChType/parseSlType/parseMpType/parseFnType/parseArType はトップレベルのTYPE系宣言
+// (CHTYPE/SLTYPE/MPTYPE/FNTYPE/ARTYPE)を1行から*ast.Declに変換する。
+
+func parseArType(atoms []Atom) (ast.Decl, error) {
+	if err := expectArgs("ARTYPE", atoms, 3); err != nil {
+		return nil, err
+	}
+	if err := checkKind(atoms[0], CatTypename); err != nil {
+		return nil, fmt.Errorf("invalid ARTYPE type name: %w", err)
+	}
+	elemExpr, err := atomExpr(atoms[1], "", 0, CatType)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ARTYPE element type: %w", err)
+	}
+	lenExpr, err := atomExpr(atoms[2], "", 0, CatImm)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ARTYPE size: %w", err)
+	}
+	return typeDecl(atoms[0].A, nil, &ast.ArrayType{Len: lenExpr, Elt: elemExpr}), nil
+}
 
 func parseChType(atoms []Atom) (ast.Decl, error) {
 	if err := expectArgs("CHTYPE", atoms, 2); err != nil {

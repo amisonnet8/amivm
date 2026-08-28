@@ -277,7 +277,7 @@ for {
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
-| `FUNC defname <<typename1 constraint1 typename2 constraint2 ... :>> type1 type2 ... : type3 type4 ...` | `func defname <<[typename1 constraint1, typename2 constraint2 ...]>>(amivm_function_param1 type1, amivm_function_param2 type2 ...) (type3, type4 ...) {` | 関数外。レシーバー付きメソッドは`FUNCM`(4.22)を使う |
+| `FUNC defname <<typename1 constraint1 typename2 constraint2 ... :>> type1 type2 ... : type3 type4 ...` | `func defname <<[typename1 constraint1, typename2 constraint2 ...]>>(amivm_function_param1 type1, amivm_function_param2 type2 ...) (type3, type4 ...) {` | 関数外。レシーバー付きメソッドは`FUNCM`(4.23)を使う |
 | `RET value1 value2 ...` | `return value1, value2 ...` | |
 | `ENDFUNC` | `}` | `FUNC`終端 |
 
@@ -440,7 +440,22 @@ default:
 }
 ```
 
-### 4.16 スライス
+### 4.16 配列
+
+| 命令 | 生成されるGoコード | 備考 |
+|---|---|---|
+| `ARTYPE typename1 type1 imm` | `type typename1 [imm]type1` | 関数外。配列は本命令を使わず`^[n]type1`という複合形でインラインに宣言することもできる(2.1節・6節参照)。`ARTYPE`は名前を付けて再利用したい場合の選択肢であり、必須ではない |
+
+`ARTYPE`の例:
+```
+ARTYPE ^Board ^Int 9
+```
+↓
+```go
+type Board [9]Int
+```
+
+### 4.17 スライス
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -472,7 +487,7 @@ head = list[:3]
 tail = list[3:]
 ```
 
-### 4.17 構造体
+### 4.18 構造体
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -510,7 +525,7 @@ p.y = 0
 x2 = p.x
 ```
 
-型パラメータを1つ持つ構造体の例(`FUNCM`の`Box`の宣言側。使用例は4.22節を参照):
+型パラメータを1つ持つ構造体の例(`FUNCM`の`Box`の宣言側。使用例は4.23節を参照):
 ```
 STTYPE ^Box ^T ^any
 	FIELD >value ^T
@@ -538,7 +553,7 @@ type Pair[T any, U any] struct {
 }
 ```
 
-### 4.18 map
+### 4.19 map
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -570,7 +585,7 @@ score, ok = scores["alice"]
 names = slices.Collect(maps.Keys(scores))
 ```
 
-### 4.19 クロージャー・関数型
+### 4.20 クロージャー・関数型
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -606,7 +621,7 @@ adder = func(amivm_closure1_param1 Int, amivm_closure1_param2 Int) (Int, Boolean
 }
 ```
 
-### 4.20 型アサーション
+### 4.21 型アサーション
 
 | 命令 | 生成されるGoコード | 備考 |
 |---|---|---|
@@ -630,7 +645,7 @@ ASSERT @n @ok @x ^Int
 n, ok = x.(Int)
 ```
 
-### 4.21 メソッド値・関数値の取得
+### 4.22 メソッド値・関数値の取得
 
 無名スライス型・無名map型・無名構造体型などを含むメソッド・関数を値として取り出す時に使う(`FNTYPE`+`FGET`では型が一致せず取得できない場合がある)。
 
@@ -659,7 +674,7 @@ FUNCVAL %f ?strings.ToUpper
 f := strings.ToUpper
 ```
 
-### 4.22 メソッド定義
+### 4.23 メソッド定義
 
 `STTYPE`の構造体にGoのネイティブなレシーバー付きメソッドを持たせる時に使う(`FUNC`はレシーバーを持たない普通の関数のみ)。
 
@@ -696,7 +711,7 @@ func (amivm_method_self *Circle) scale_amivm_function(amivm_function_param1 Floa
 }
 ```
 
-ジェネリクスあり・型パラメータ1つの`FUNCM`の例(`^Box`は4.17節で宣言したもの):
+ジェネリクスあり・型パラメータ1つの`FUNCM`の例(`^Box`は4.18節で宣言したもの):
 ```
 FUNCM !get ^*Box ^T : : ^T
 	RET $0
@@ -709,7 +724,7 @@ func (amivm_method_self *Box[T]) get_amivm_function() (T) {
 }
 ```
 
-ジェネリクスあり・型パラメータが複数の`FUNCM`の例(`^Pair`は4.17節で宣言したもの):
+ジェネリクスあり・型パラメータが複数の`FUNCM`の例(`^Pair`は4.18節で宣言したもの):
 ```
 FUNCM !swap ^*Pair ^T ^U : : ^U ^T
 	VAR %a ^U
@@ -730,7 +745,7 @@ func (amivm_method_self *Pair[T, U]) swap_amivm_function() (U, T) {
 }
 ```
 
-### 4.23 インターフェース型定義
+### 4.24 インターフェース型定義
 
 インターフェースはメソッドシグネチャの羅列を持つ(`STTYPE`のフィールドの羅列に相当)。
 
@@ -768,7 +783,7 @@ type KVStore[K comparable, V any] interface {
 }
 ```
 
-### 4.24 ジェネリクス型の実体化(別名宣言)
+### 4.25 ジェネリクス型の実体化(別名宣言)
 
 `STTYPE`/`INTYPE`等でジェネリクスに宣言した型(`Box<T>`等)は、そのままでは`type`カテゴリ(5節)のトークンとして参照できない(型引数を当てはめる場所が無い)。型引数を当てはめて確定させた具体型に、別名を宣言することで、以降は普通の`type`カテゴリのトークンとしてどこでも使えるようにする。
 
@@ -809,6 +824,7 @@ v = b.value
 
 | カテゴリ | 説明 | 許容形式 |
 |---|---|---|
+| `imm` | 即値(コンパイル時定数のリテラル。識別子は不可) | `0`,`1234` / `'A'` |
 | `whole` | 0以上の整数(whole number) | `$N` / `&N` / `&L-N` / `%xxx_123` / `@xxx_123` / `@xxx_123.xxx_123` / `0`,`1234` / `'A'` |
 | `integer1 integer2` | 整数 | `whole`の形式 + `-1234` |
 | `number1 number2` | 数値 | `integer`の形式 + `123.4`,`1.23e4` |

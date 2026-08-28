@@ -97,7 +97,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, type assertions, `METHVAL`/`FUNCVAL`, generic functions, generic `FUNCM` methods with `GETYPE`, and `INTYPE` interfaces), live in [`examples/`](examples/).
+More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, type assertions, `METHVAL`/`FUNCVAL`, generic functions, generic `FUNCM` methods with `GETYPE`, `INTYPE` interfaces, and named fixed-size array types with `ARTYPE`), live in [`examples/`](examples/).
 
 ## The IR language, briefly
 
@@ -122,7 +122,7 @@ Instructions are grouped roughly into:
 - **Arithmetic / bitwise / shift / logical / comparison**: `ADD` `SUB` `MUL` `DIV` `MOD` · `BAND` `BOR` `BXOR` `BCLEAR` `BNOT` · `SHL` `SHR` · `AND` `OR` `NOT` · `EQ` `NEQ` `LT` `LTE` `GT` `GTE`
 - **Strings**: `CONCAT`, `SLICE`
 - **Pointers**: `ADDR`, `PGET`, `PSET`
-- **Arrays**: `ASET`, `AGET`
+- **Arrays**: `ARTYPE` (named fixed-size array type), `ASET`, `AGET`
 - **Labels & `goto`**: `LABEL`, `GOTO`
 - **Conditionals**: `IF`/`ELIF`/`ELSE`/`ENDIF`
 - **Loops**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`

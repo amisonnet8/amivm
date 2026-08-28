@@ -97,7 +97,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション・METHVAL/FUNCVAL・ジェネリクス関数・GETYPEを使ったジェネリクスFUNCMメソッド・INTYPEインターフェース)に分けて[`examples/`](examples/)に置いています。
+全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション・METHVAL/FUNCVAL・ジェネリクス関数・GETYPEを使ったジェネリクスFUNCMメソッド・INTYPEインターフェース・ARTYPEによる名前付き固定長配列型)に分けて[`examples/`](examples/)に置いています。
 
 ## IR言語の概要
 
@@ -122,7 +122,7 @@ Hello, AMIVM!
 - **算術・ビット演算・シフト・論理・比較**: `ADD` `SUB` `MUL` `DIV` `MOD` ・ `BAND` `BOR` `BXOR` `BCLEAR` `BNOT` ・ `SHL` `SHR` ・ `AND` `OR` `NOT` ・ `EQ` `NEQ` `LT` `LTE` `GT` `GTE`
 - **文字列**: `CONCAT`, `SLICE`
 - **ポインタ**: `ADDR`, `PGET`, `PSET`
-- **配列**: `ASET`, `AGET`
+- **配列**: `ARTYPE`(名前付き固定長配列型), `ASET`, `AGET`
 - **ラベル・goto**: `LABEL`, `GOTO`
 - **条件分岐**: `IF`/`ELIF`/`ELSE`/`ENDIF`
 - **ループ**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`

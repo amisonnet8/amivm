@@ -24,6 +24,7 @@ const (
 	CatField
 	CatMethod
 	CatPoint
+	CatImm
 	CatWhole
 	CatFromTo
 	CatInt
@@ -43,6 +44,7 @@ var categoryLabel = map[Category]string{
 	CatVariable: "variable reference", CatType: "type", CatTypename: "defined type/type parameter name",
 	CatConstraint: "type parameter constraint", CatReceiver: "FUNCM receiver type",
 	CatField: "struct field name", CatMethod: "method name", CatPoint: "ADDR field/index target",
+	CatImm:   "immediate value (compile-time constant literal)",
 	CatWhole: "non-negative integer", CatFromTo: "slice range (from/to)",
 	CatInt: "integer", CatNumber: "number", CatBool: "boolean",
 	CatSlice: "slice/string", CatOrder: "orderable comparison value", CatValue: "value",
@@ -98,7 +100,13 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	m[CatField] = kindSet(KField)
 	m[CatMethod] = kindSet(KMethod)
 
-	whole := mergeKinds(identRefFull, kindSet(KZero, KPosInt, KRune))
+	// imm: コンパイル時定数のリテラルのみ(識別子は不可)。ARTYPEの配列サイズのように、
+	// Goの型レベルで定数式が要求される箇所(変数を許すと`go/types`ではなく構文の
+	// 時点で妥当性が崩れる)で使う。
+	imm := kindSet(KZero, KPosInt, KRune)
+	m[CatImm] = imm
+
+	whole := mergeKinds(identRefFull, imm)
 	m[CatWhole] = whole
 	m[CatFromTo] = mergeKinds(whole, kindSet(KBlank))
 	// point: ADDRの第3引数(フィールド/添字の対象)。wholeの許容形式に構造体フィールド名を加えたもの。

@@ -1,0 +1,47 @@
+// ARTYPE(名前付き固定長配列型)+immオペランド(0,1234,'A'のような即値リテラル)のテスト。
+// 配列は既存のインライン記法(^[5]int等。examples/09_array_goto.ir参照)でも書けるが、
+// ARTYPEを使うと名前を付けて複数箇所で使い回せる。
+ARTYPE	^Board	^int	9
+ARTYPE	^Letters	^rune	'A'
+
+FUNC	!main	:
+	VAR	%b	^Board
+	VAR	%i	^int
+	VAR	%sum	^int
+	VAR	%cond	^bool
+	VAR	%v	^int
+
+	SET	%i	0
+LABEL	#fill
+	GTE	%cond	%i	9
+	IF	%cond
+		GOTO	#filled
+	ENDIF
+	ASET	%b	%i	%i
+	ADD	%i	%i	1
+	GOTO	#fill
+LABEL	#filled
+
+	SET	%sum	0
+	SET	%i	0
+LABEL	#loop
+	GTE	%cond	%i	9
+	IF	%cond
+		GOTO	#done
+	ENDIF
+	AGET	%v	%b	%i
+	ADD	%sum	%sum	%v
+	ADD	%i	%i	1
+	GOTO	#loop
+LABEL	#done
+
+	CALL	:	?fmt.Println	%sum
+
+	VAR	%letters	^Letters
+	ASET	%letters	0	'X'
+	VAR	%first	^rune
+	AGET	%first	%letters	0
+	CALL	:	?fmt.Println	%first
+
+	RET
+ENDFUNC

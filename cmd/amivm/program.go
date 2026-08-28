@@ -7,7 +7,7 @@ import (
 
 // =====================================================================
 // プログラム全体の組み立て
-// トップレベルには GVAR / FUNC / CHTYPE / SLTYPE / STTYPE / MPTYPE / FNTYPE のみ置ける
+// トップレベルには GVAR / FUNC / ARTYPE / CHTYPE / SLTYPE / STTYPE / MPTYPE / FNTYPE のみ置ける
 // =====================================================================
 
 func buildProgram(source string) (*ast.File, error) {
@@ -74,6 +74,15 @@ func buildProgram(source string) (*ast.File, error) {
 			}
 			decls = append(decls, funcDecl)
 			i = next
+
+		case "ARTYPE":
+			atoms := tokenizeAndClassify(line)
+			decl, err := parseArType(atoms[1:])
+			if err != nil {
+				return nil, err
+			}
+			decls = append(decls, decl)
+			i++
 
 		case "CHTYPE":
 			atoms := tokenizeAndClassify(line)
@@ -163,7 +172,7 @@ func buildProgram(source string) (*ast.File, error) {
 			i++
 
 		default:
-			return nil, fmt.Errorf("only GVAR/FUNC/FUNCM/CHTYPE/SLTYPE/STTYPE/INTYPE/MPTYPE/FNTYPE/GETYPE are allowed at the top level. invalid line: %s", line)
+			return nil, fmt.Errorf("only GVAR/FUNC/FUNCM/ARTYPE/CHTYPE/SLTYPE/STTYPE/INTYPE/MPTYPE/FNTYPE/GETYPE are allowed at the top level. invalid line: %s", line)
 		}
 	}
 

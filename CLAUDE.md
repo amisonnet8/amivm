@@ -118,7 +118,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 ## 設計方針(踏襲すること)
 
-- **チャネル・スライス・map・構造体・クロージャーは、対応するTYPE系宣言なしには使えない。** `chan`は`CHTYPE`、スライスは`SLTYPE`、構造体は`STTYPE`、mapは`MPTYPE`、関数型・クロージャーの型は`FNTYPE`で`typename`(旧`deftype`)として事前宣言し、以降はその`typename`(`^xxx`のみの単純な形)を参照する。型のインライン埋め込み(`^chan xxx`のような複合形をその場で書くこと)は廃止されている
+- **チャネル・スライス・map・構造体・クロージャーは、対応するTYPE系宣言なしには使えない。** `chan`は`CHTYPE`、スライスは`SLTYPE`、構造体は`STTYPE`、mapは`MPTYPE`、関数型・クロージャーの型は`FNTYPE`で`typename`(旧`deftype`)として事前宣言し、以降はその`typename`(`^xxx`のみの単純な形)を参照する。型のインライン埋め込み(`^chan xxx`のような複合形をその場で書くこと)は廃止されている。**配列だけは例外で、`^[n]xxx`というインライン複合形が今も使え、事前宣言は必須ではない**(サイズがリテラルごとに変わるため)。名前を付けて使い回したい場合の選択肢として`ARTYPE typename1 type1 imm`(`type typename1 [imm]type1`)も用意しているが、これは既存の`^[n]xxx`を置き換えるものではない。`imm`は識別子を許さないコンパイル時定数リテラル専用のカテゴリ(`0`,`1234`,`'A'`)で、Goの配列長が定数式である必要があることに対応している
 - **意味の正しさ(型整合性、未定義識別子、メソッド存在チェックなど)はAMIVM側で検証せず、`go/types`に全面的に委ねる。** AMIVM側は構文的に妥当な`ast`を組み立てることだけに責任を持つ(`$0`を代入先に使わせない、のような「Goの構文としては合法だが構造的に禁止したい」ケースだけが数少ない例外)
 - **トークンの区切り文字はタブ。** 文字列リテラルが誤分割されるのを避けるため
 - **`FUNC`/`FUNCM`/`STTYPE`/`INTYPE`はネスト禁止。`IF`/`LOOP`/`CLOS`/`SEL`はいずれもネストできる。** `CLOS`の抽出は`&N`/`&L-N`解決のためネスト深さ(`closureLevel`)を`parseBody`の再帰呼び出しに引き継ぐ必要がある(前述)。`IF`/`LOOP`/`SEL`のネストは既存の`parseBody`(再帰下降)の枠組みでそのまま表現できる。`IF`はブロック開始行(`SEL`/`CLOS`と同様)として`parseBody`に認識させ、`ELIF`/`ELSE`/`ENDIF`を(ネストした内側の`IF`のものと混同しないよう)自分自身の再帰呼び出しの範囲内でだけ区切りとして認識する専用の走査を書く。`LOOP`も同様に`BREAK`/`CONTINUE`/`ENDLOOP`を伴うブロックとして扱う
@@ -169,7 +169,7 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 ## 現在の実装状況
 
-上記の実装は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`CLOS`・`IF`/`ELIF`/`ELSE`/`ENDIF`・`LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`・`ASSERT`・`METHVAL`/`FUNCVAL`・`FUNCM`/`ENDFUNCM`・`INTYPE`/`METHOD`/`ENDINTYPE`・`FUNC`/`CALL`/`DEFER`/`SPAWN`/`STTYPE`/`INTYPE`のジェネリクス対応・`GETYPE`・CLIの`-o`/`-v`/`-i`など)。`examples/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
+上記の実装は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`ARTYPE`・`CLOS`・`IF`/`ELIF`/`ELSE`/`ENDIF`・`LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`・`ASSERT`・`METHVAL`/`FUNCVAL`・`FUNCM`/`ENDFUNCM`・`INTYPE`/`METHOD`/`ENDINTYPE`・`FUNC`/`CALL`/`DEFER`/`SPAWN`/`STTYPE`/`INTYPE`のジェネリクス対応・`GETYPE`・CLIの`-o`/`-v`/`-i`/`-h`など)。`examples/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
 
 ## 開発の進め方
 
