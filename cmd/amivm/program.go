@@ -34,7 +34,7 @@ func buildProgram(source string) (*ast.File, error) {
 			i++
 
 		case "FUNC":
-			defName, params, results, err := parseFuncSignature(line)
+			defName, typeParams, params, results, err := parseFuncSignature(line)
 			if err != nil {
 				return nil, err
 			}
@@ -43,6 +43,28 @@ func buildProgram(source string) (*ast.File, error) {
 				return nil, fmt.Errorf("関数 %s のパースに失敗: %w", defName, err)
 			}
 			funcDecl := &ast.FuncDecl{
+				Name: ast.NewIdent(amivmFuncGoName(defName)),
+				Type: &ast.FuncType{
+					TypeParams: typeParams,
+					Params:     &ast.FieldList{List: params},
+					Results:    fieldListOrNil(results),
+				},
+				Body: &ast.BlockStmt{List: body},
+			}
+			decls = append(decls, funcDecl)
+			i = next
+
+		case "FUNCM":
+			defName, recv, params, results, err := parseFuncmSignature(line)
+			if err != nil {
+				return nil, err
+			}
+			body, next, _, err := parseBody(lines, i+1, defName, 0, []string{"ENDFUNCM"})
+			if err != nil {
+				return nil, fmt.Errorf("メソッド %s のパースに失敗: %w", defName, err)
+			}
+			funcDecl := &ast.FuncDecl{
+				Recv: &ast.FieldList{List: []*ast.Field{recv}},
 				Name: ast.NewIdent(amivmFuncGoName(defName)),
 				Type: &ast.FuncType{
 					Params:  &ast.FieldList{List: params},
@@ -91,22 +113,57 @@ func buildProgram(source string) (*ast.File, error) {
 
 		case "STTYPE":
 			atoms := tokenizeAndClassify(line)
-			if err := expectArgs("STTYPE", atoms[1:], 1); err != nil {
-				return nil, err
+			rest := atoms[1:]
+			if len(rest) == 0 {
+				return nil, fmt.Errorf("STTYPE構文が不正です(型名がありません): %s", line)
 			}
-			deftypeAtom := atoms[1]
-			if err := checkKind(deftypeAtom, CatDeftype); err != nil {
+			deftypeAtom := rest[0]
+			if err := checkKind(deftypeAtom, CatTypename); err != nil {
 				return nil, fmt.Errorf("STTYPEの型名が不正です: %w", err)
+			}
+			typeParams, err := parseTypeParamPairs(rest[1:])
+			if err != nil {
+				return nil, fmt.Errorf("STTYPEの型パラメータが不正です: %w", err)
 			}
 			structType, next, err := parseStructBlock(lines, i+1)
 			if err != nil {
 				return nil, err
 			}
-			decls = append(decls, typeDecl(deftypeAtom.A, structType))
+			decls = append(decls, typeDecl(deftypeAtom.A, typeParams, structType))
 			i = next
 
+		case "INTYPE":
+			atoms := tokenizeAndClassify(line)
+			rest := atoms[1:]
+			if len(rest) == 0 {
+				return nil, fmt.Errorf("INTYPE構文が不正です(型名がありません): %s", line)
+			}
+			nameAtom := rest[0]
+			if err := checkKind(nameAtom, CatTypename); err != nil {
+				return nil, fmt.Errorf("INTYPEの型名が不正です: %w", err)
+			}
+			typeParams, err := parseTypeParamPairs(rest[1:])
+			if err != nil {
+				return nil, fmt.Errorf("INTYPEの型パラメータが不正です: %w", err)
+			}
+			ifaceType, next, err := parseInterfaceBlock(lines, i+1)
+			if err != nil {
+				return nil, err
+			}
+			decls = append(decls, typeDecl(nameAtom.A, typeParams, ifaceType))
+			i = next
+
+		case "GETYPE":
+			atoms := tokenizeAndClassify(line)
+			decl, err := parseGetype(atoms[1:])
+			if err != nil {
+				return nil, err
+			}
+			decls = append(decls, decl)
+			i++
+
 		default:
-			return nil, fmt.Errorf("トップレベルにはGVAR/FUNC/CHTYPE/SLTYPE/STTYPE/MPTYPE/FNTYPEのみ置けます。不正な行: %s", line)
+			return nil, fmt.Errorf("トップレベルにはGVAR/FUNC/FUNCM/CHTYPE/SLTYPE/STTYPE/INTYPE/MPTYPE/FNTYPE/GETYPEのみ置けます。不正な行: %s", line)
 		}
 	}
 

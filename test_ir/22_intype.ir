@@ -1,0 +1,43 @@
+// INTYPE(インターフェース宣言)/METHOD(シグネチャ)/ENDINTYPEのテスト。
+// INTYPE内のMETHODシグネチャ行は他のコロン区切り命令(FUNC/CALL/DEFER/SPAWN/FUNCM)と
+// 同様コロンが常に必須(戻り値0個でも省略できない)。
+// FUNCMが生成するGoのメソッド名は<defname>_amivm_functionという命名規則に従うため、
+// INTYPE側のMETHOD名もそれに合わせて<area_amivm_functionのように書く(そうしないと
+// 構造体が実際にはインターフェースを満たさなくなる)。
+// Circle(FUNCMでareaを実装)をShape型の変数に代入し、Shapeを引数に取るFUNCから
+// METHVALでメソッド値を取り出して呼ぶことで、ポリモーフィズムを実演する。
+INTYPE	^Shape
+	METHOD	<area_amivm_function	:	^float64
+ENDINTYPE
+
+STTYPE	^Circle
+	FIELD	>radius	^float64
+ENDSTTYPE
+
+FUNCM	!area	^*Circle	:	^float64
+	VAR	%r	^float64
+	FGET	%r	$0	>radius
+	VAR	%result	^float64
+	MUL	%result	%r	%r
+	RET	%result
+ENDFUNCM
+
+FUNC	!printArea	^Shape	:
+	VAR	%a	^float64
+	METHVAL	%areaFn	$1	<area_amivm_function
+	CALL	%a	:	%areaFn
+	CALL	:	?fmt.Println	%a
+ENDFUNC
+
+FUNC	!main	:
+	VAR	%c	^Circle
+	FSET	%c	>radius	4.0
+	VAR	%pc	^*Circle
+	ADDR	%pc	%c
+	VAR	%s	^Shape
+	SET	%s	%pc
+
+	CALL	:	!printArea	%s
+
+	RET
+ENDFUNC

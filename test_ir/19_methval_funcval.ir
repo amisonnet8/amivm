@@ -1,0 +1,28 @@
+// METHVAL(:=によるメソッド値の取得。旧METHODを改名)/FUNCVAL(:=による
+// レシーバー無し関数値の取得)のテスト。FNTYPEで宣言した関数型では、Goの実際の
+// メソッド値・関数値の型と完全一致せず代入できないケースがあるため、:=による
+// Goの型推論に任せる。どちらも代入先(local)はVARで事前宣言しない。
+FUNC	!main	:
+	VAR	%f	^*os.File
+	VAR	%err	^error
+	VAR	%closeErr	^error
+	VAR	%upper	^string
+
+	CALL	%f	%err	:	?os.Open	"go.mod"
+
+	// METHVAL: 使うメソッド値
+	METHVAL	%closeFn	%f	<Close
+	CALL	%closeErr	:	%closeFn
+
+	// METHVAL: 使わないメソッド値(未使用変数の自己修復が:=宣言にも効くことのテスト)
+	METHVAL	%nameFn	%f	<Name
+
+	// FUNCVAL: レシーバー無しの関数値(Goライブラリのパッケージ関数)を取得して呼ぶ
+	FUNCVAL	%upperFn	?strings.ToUpper
+	CALL	%upper	:	%upperFn	"go"
+
+	// FUNCVAL: 使わない関数値(未使用変数の自己修復が:=宣言にも効くことのテスト)
+	FUNCVAL	%unusedFn	?strings.ToLower
+
+	RET
+ENDFUNC

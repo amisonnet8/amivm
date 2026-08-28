@@ -96,7 +96,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, and type assertions), live in [`test_ir/`](test_ir/).
+More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, type assertions, `METHVAL`/`FUNCVAL`, generic functions, generic `FUNCM` methods with `GETYPE`, and `INTYPE` interfaces), live in [`test_ir/`](test_ir/).
 
 ## The IR language, briefly
 
@@ -110,6 +110,7 @@ Every identifier carries a one-character prefix that fixes its kind up front:
 | `@` | Package-level variable |
 | `^` | Type name |
 | `>` | Struct field name |
+| `<` | Method name |
 | `!` | AMIVM-defined function name |
 | `?` | Go function name |
 | `#` | Label name |
@@ -125,14 +126,16 @@ Instructions are grouped roughly into:
 - **Conditionals**: `IF`/`ELIF`/`ELSE`/`ENDIF`
 - **Loops**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`
 - **Type assertions**: `ASSERT`
-- **Functions**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN`
+- **Functions**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN` (all support Go generics — type parameters on `FUNC`, explicit type arguments on `CALL`/`DEFER`/`SPAWN`)
+- **Methods & interfaces**: `METHVAL` (method value), `FUNCVAL` (receiverless function value), `FUNCM`/`ENDFUNCM` (define a method with a receiver), `INTYPE`/`METHOD`/`ENDINTYPE` (interface declaration)
 - **Channels & `select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **Slices**: `SLTYPE`, `SLMAKE`, `SLICE`
-- **Structs**: `STTYPE`/`ENDSTTYPE`, `FIELD`, `FSET`, `FGET`
+- **Structs**: `STTYPE`/`ENDSTTYPE` (generic type parameters supported), `FIELD`, `FSET`, `FGET`
 - **Maps**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`, `MPKEYS`
 - **Closures**: `FNTYPE`, `CLOS`/`ENDCLOS`
+- **Generic type aliasing**: `GETYPE` (instantiate a generic `STTYPE`/`INTYPE` with concrete type arguments under a new name)
 
-Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value.
+Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value — or, when `FNTYPE`'s declared type doesn't line up exactly with Go's real method-value type, `METHVAL`/`FUNCVAL` pull the value out via `:=` instead, letting Go infer the type. To *define* a method on your own `STTYPE`-declared struct (rather than just calling an existing one), use `FUNCM`.
 
 The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), read the source under `cmd/amivm/` directly — it's commented throughout.
 
@@ -166,11 +169,11 @@ ENDFUNC
 
 running `amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt` (from inside `yourmodule`, or with `-o` pointing into it) generates a `hello.go` with `import xxrt "yourmodule/xxrt"` already in place, ready for `go build`.
 
-**Calling methods** (e.g. `file.Close()`, or a method on your own type) works the same way regardless of whether the receiver type is a stdlib type or your own: declare the method's function type with `FNTYPE`, pull the bound method value out of a struct value with `FGET`, and call that value — see [`test_ir/16_method_call.ir`](test_ir/16_method_call.ir) for a worked example against `(*os.File).Close`.
+**Calling methods** (e.g. `file.Close()`, or a method on your own type) works the same way regardless of whether the receiver type is a stdlib type or your own: declare the method's function type with `FNTYPE`, pull the bound method value out of a struct value with `FGET`, and call that value — see [`test_ir/16_method_call.ir`](test_ir/16_method_call.ir) for a worked example against `(*os.File).Close`. When the exact method-value type is hard to pin down with `FNTYPE`, `METHVAL`/`FUNCVAL` (`test_ir/19_methval_funcval.ir`) pull the value out via `:=` instead. **Defining** a method with a receiver on your own struct — as opposed to just calling an existing one — is `FUNCM`/`ENDFUNCM`, which also supports Go generics via type parameters declared on `STTYPE`/`INTYPE` (`test_ir/21_funcm_getype.ir`, `test_ir/22_intype.ir`).
 
 ## Constraints
 
-- `FUNC` may only appear at the top level (no nested function definitions). `STTYPE` likewise cannot nest. `IF`, `LOOP`, `CLOS`, and `SEL` can all nest, including inside one another.
+- `FUNC`/`FUNCM` may only appear at the top level (no nested function/method definitions). `STTYPE`/`INTYPE` likewise cannot nest. `IF`, `LOOP`, `CLOS`, and `SEL` can all nest, including inside one another.
 - Arrays are one-dimensional, fixed-length only. Multi-dimensional arrays are expected to be flattened by the (not-yet-written) front end before reaching AMIVM-IR.
 - Semantic correctness (type checking, undefined identifiers, method existence, etc.) is entirely delegated to `go/types`; AMIVM itself only guarantees that it emits syntactically valid Go.
 

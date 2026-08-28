@@ -1,0 +1,38 @@
+// FUNC/CALL/DEFER/SPAWNのジェネリクス対応(型パラメータ宣言・制約・CALL/DEFER/
+// SPAWNでの明示的型引数指定)のテスト。型パラメータ宣言は「typename constraint」の
+// ペアの並びで、FUNCのdefname直後にコロン区切りで追加する(コロン2個になる)。
+// 非ジェネリクスのFUNC(コロン1個のまま)と対比できるようにdivmodも併記する。
+FUNC	!divmod	^int	^int	:	^int	^int
+	VAR	%q	^int
+	VAR	%r	^int
+	DIV	%q	$1	$2
+	MOD	%r	$1	$2
+	RET	%q	%r
+ENDFUNC
+
+FUNC	!pair	^T	^any	^U	^any	:	^T	^U	:	^T	^U
+	RET	$1	$2
+ENDFUNC
+
+FUNC	!describe	^T	^any	:	^T	:
+	CALL	:	?fmt.Println	$1
+ENDFUNC
+
+FUNC	!main	:
+	VAR	%q	^int
+	VAR	%r	^int
+	VAR	%p1	^int
+	VAR	%p2	^string
+
+	CALL	%q	%r	:	!divmod	7	2
+
+	// 明示的型引数付きCALL(ジェネリクス関数)
+	CALL	%p1	%p2	:	!pair	^int	^string	:	42	"go"
+
+	// DEFER/SPAWNでも「callname type1 type2 ... : value1 value2 ...」で
+	// 明示的型引数を渡せる
+	DEFER	!describe	^int	:	%p1
+	SPAWN	!describe	^string	:	%p2
+
+	RET
+ENDFUNC

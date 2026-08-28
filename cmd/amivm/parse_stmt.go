@@ -26,7 +26,7 @@ func expectArgs(kw string, atoms []Atom, n int) error {
 	return nil
 }
 
-// splitColon は、CALL/FUNC/FNTYPE/CLOSで使う「:」1個による2分割を行う。
+// splitColon は、FNTYPE/CLOSで使う「:」1個による2分割を行う。
 // コロンは戻り値・代入先と、呼び出し対象・パラメータ列を区切るために必ず1個必要。
 func splitColon(atoms []Atom) (left, right []Atom, err error) {
 	idx := -1
@@ -42,6 +42,23 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 		return nil, nil, fmt.Errorf("コロン(:)が見つかりません: %s", joinRaw(atoms))
 	}
 	return atoms[:idx], atoms[idx+1:], nil
+}
+
+// splitByColons は、atoms列を「:」の個数だけセグメントに分割する(コロン自体は
+// 結果に含まれない)。コロンが0個なら要素数1のセグメント列を返す。FUNC/FUNCM/
+// CALL/DEFER/SPAWNのように、ジェネリクスの型引数の有無でコロンの個数が
+// 1個(無し)/2個(有り)と変わる命令の可変分割に使う。
+func splitByColons(atoms []Atom) [][]Atom {
+	var segments [][]Atom
+	start := 0
+	for i, a := range atoms {
+		if a.Kind == KColon {
+			segments = append(segments, atoms[start:i])
+			start = i + 1
+		}
+	}
+	segments = append(segments, atoms[start:])
+	return segments
 }
 
 // parseSingleLine は、ブロック開始行(FUNC/SEL/CLOS/STTYPE)・終了行・
@@ -111,8 +128,10 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 		return parseFset(rest, funcName, closureLevel)
 	case "FGET":
 		return parseFget(rest, funcName, closureLevel)
-	case "METHOD":
-		return parseMethod(rest, funcName, closureLevel)
+	case "METHVAL":
+		return parseMethval(rest, funcName, closureLevel)
+	case "FUNCVAL":
+		return parseFuncval(rest, funcName, closureLevel)
 	case "MSET":
 		return parseMset(rest, funcName, closureLevel)
 	case "MGET":
@@ -431,11 +450,33 @@ func parseRet(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error)
 	return &ast.ReturnStmt{Results: results}, nil
 }
 
-func buildCallExpr(callAtom Atom, argAtoms []Atom, funcName string, closureLevel int) (*ast.CallExpr, error) {
+// typeExprList はatoms列(いずれもtypeカテゴリ)を[]ast.Exprに変換する。
+// GETYPEの型引数、CALL/DEFER/SPAWNの明示的型引数で使う。
+func typeExprList(atoms []Atom) ([]ast.Expr, error) {
+	var exprs []ast.Expr
+	for _, a := range atoms {
+		e, err := atomExpr(a, "", 0, CatType)
+		if err != nil {
+			return nil, err
+		}
+		exprs = append(exprs, e)
+	}
+	return exprs, nil
+}
+
+// buildCallExpr は呼び出し対象・(あれば)明示的型引数・引数列からast.CallExprを
+// 組み立てる。typeArgAtomsが空ならinstantiateTypeExprはfnをそのまま返す
+// (非ジェネリクス呼び出し)。
+func buildCallExpr(callAtom Atom, typeArgAtoms []Atom, argAtoms []Atom, funcName string, closureLevel int) (*ast.CallExpr, error) {
 	fn, err := atomExpr(callAtom, funcName, closureLevel, CatCallname)
 	if err != nil {
 		return nil, fmt.Errorf("呼び出し対象が不正です: %w", err)
 	}
+	typeArgs, err := typeExprList(typeArgAtoms)
+	if err != nil {
+		return nil, fmt.Errorf("型引数が不正です: %w", err)
+	}
+	fn = instantiateTypeExpr(fn, typeArgs)
 	var args []ast.Expr
 	for _, a := range argAtoms {
 		v, err := atomExpr(a, funcName, closureLevel, CatValue)
@@ -447,19 +488,31 @@ func buildCallExpr(callAtom Atom, argAtoms []Atom, funcName string, closureLevel
 	return &ast.CallExpr{Fun: fn, Args: args}, nil
 }
 
-// parseCall は「CALL multi1 multi2 ... : callname value1 value2 ...」を解釈する。
-// コロンの左側(多重代入先)は空でもよい(その場合は式文として呼び出すだけになる)。
+// parseCall は「CALL multi1 multi2 ... : callname (type1 type2 ... :) value1 value2 ...」
+// を解釈する。最初のコロンの左側(多重代入先)は空でもよい(その場合は式文として
+// 呼び出すだけになる)。コロンがもう1個あれば、callnameの直後は明示的型引数になる。
 func parseCall(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
-	destAtoms, rest, err := splitColon(atoms)
-	if err != nil {
-		return nil, fmt.Errorf("CALL構文が不正です: %w", err)
+	segments := splitByColons(atoms)
+	var destAtoms, calleeAtoms, argAtoms []Atom
+	switch len(segments) {
+	case 2:
+		destAtoms, calleeAtoms = segments[0], segments[1]
+	case 3:
+		destAtoms, calleeAtoms, argAtoms = segments[0], segments[1], segments[2]
+	default:
+		return nil, fmt.Errorf("CALL構文が不正です: %s", joinRaw(atoms))
 	}
-	if len(rest) == 0 {
+	if len(calleeAtoms) == 0 {
 		return nil, fmt.Errorf("CALL構文が不正です(呼び出し対象がありません): %s", joinRaw(atoms))
 	}
-	callAtom, argAtoms := rest[0], rest[1:]
+	callAtom, typeArgAtoms := calleeAtoms[0], calleeAtoms[1:]
+	if len(segments) == 2 {
+		// コロン1個: calleeAtomsの残りがそのまま値引数(型引数なし)
+		argAtoms = typeArgAtoms
+		typeArgAtoms = nil
+	}
 
-	callExpr, err := buildCallExpr(callAtom, argAtoms, funcName, closureLevel)
+	callExpr, err := buildCallExpr(callAtom, typeArgAtoms, argAtoms, funcName, closureLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -479,12 +532,31 @@ func parseCall(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	return &ast.AssignStmt{Lhs: lhs, Tok: token.ASSIGN, Rhs: []ast.Expr{callExpr}}, nil
 }
 
-// parseDeferOrSpawn は「DEFER/SPAWN callname value1 value2 ...」を解釈する(コロンなし)。
+// parseDeferOrSpawn は「DEFER/SPAWN callname (type1 type2 ... :) value1 value2 ...」を
+// 解釈する。コロンが無ければ型引数無し、コロンが1個あればcallname直後が型引数になる。
 func parseDeferOrSpawn(kw string, atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) == 0 {
 		return nil, fmt.Errorf("%s構文が不正です(呼び出し対象がありません): %s", kw, kw)
 	}
-	callExpr, err := buildCallExpr(atoms[0], atoms[1:], funcName, closureLevel)
+	segments := splitByColons(atoms)
+	var calleeAtoms, typeArgAtoms, argAtoms []Atom
+	switch len(segments) {
+	case 1:
+		calleeAtoms = segments[0]
+	case 2:
+		calleeAtoms, argAtoms = segments[0], segments[1]
+		typeArgAtoms = calleeAtoms[1:]
+	default:
+		return nil, fmt.Errorf("%s構文が不正です: %s", kw, joinRaw(atoms))
+	}
+	if len(calleeAtoms) == 0 {
+		return nil, fmt.Errorf("%s構文が不正です(呼び出し対象がありません): %s", kw, joinRaw(atoms))
+	}
+	callAtom := calleeAtoms[0]
+	if len(segments) == 1 {
+		argAtoms = calleeAtoms[1:]
+	}
+	callExpr, err := buildCallExpr(callAtom, typeArgAtoms, argAtoms, funcName, closureLevel)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", kw, err)
 	}
@@ -502,7 +574,7 @@ func parseChOrSlMake(kw string, atoms []Atom, funcName string, closureLevel int)
 	if err != nil {
 		return nil, fmt.Errorf("%sの変数が不正です: %w", kw, err)
 	}
-	typExpr, err := atomExpr(atoms[1], "", 0, CatDeftype)
+	typExpr, err := atomExpr(atoms[1], "", 0, CatTypename)
 	if err != nil {
 		return nil, fmt.Errorf("%sの型が不正です: %w", kw, err)
 	}
@@ -525,7 +597,7 @@ func parseMpMake(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	if err != nil {
 		return nil, fmt.Errorf("MPMAKEの変数が不正です: %w", err)
 	}
-	typExpr, err := atomExpr(atoms[1], "", 0, CatDeftype)
+	typExpr, err := atomExpr(atoms[1], "", 0, CatTypename)
 	if err != nil {
 		return nil, fmt.Errorf("MPMAKEの型が不正です: %w", err)
 	}
@@ -672,30 +744,53 @@ func parseFget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}, nil
 }
 
-// parseMethod は「METHOD local variable method」を解釈する
+// parseMethval は「METHVAL local variable method」を解釈する
 // (local := variable.method)。localはVARで事前宣言しない。FNTYPEで宣言した
 // 関数型とGoの実際のメソッド値の型が(概念上は同じでも)完全一致せず代入できない
 // ケースがあるため、:=によるGoの型推論に任せることでこれを回避する。localが
 // CatVa(%xxx_123のみ)なのはこの:=の意味論と整合させるため($N/&N/@xxxのような
 // 既存の宣言済み識別子は:=の左辺に使えない)。
-func parseMethod(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
-	if err := expectArgs("METHOD", atoms, 3); err != nil {
+func parseMethval(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
+	if err := expectArgs("METHVAL", atoms, 3); err != nil {
 		return nil, err
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatVa)
 	if err != nil {
-		return nil, fmt.Errorf("METHODの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("METHVALの代入先が不正です: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("METHODの対象が不正です: %w", err)
+		return nil, fmt.Errorf("METHVALの対象が不正です: %w", err)
 	}
 	if atoms[2].Kind != KMethod {
-		return nil, fmt.Errorf("METHODのメソッド名が不正です: %s", atoms[2].Raw)
+		return nil, fmt.Errorf("METHVALのメソッド名が不正です: %s", atoms[2].Raw)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.DEFINE,
 		Rhs: []ast.Expr{&ast.SelectorExpr{X: variable, Sel: ast.NewIdent(atoms[2].A)}},
+	}, nil
+}
+
+// parseFuncval は「FUNCVAL local callname」を解釈する(local := callname)。
+// レシーバーを持たない関数値(Goライブラリのパッケージ関数・AMIVM関数・既存の
+// 関数値変数)を値として取り出す、METHVALの兄弟命令。callnameはCALLと同じ
+// カテゴリ(!xxx/?xxx/?xxx.yyy/%xxx/@xxx/$N/&N/&L-N)を使う。localはMETHVALと
+// 同じ理由でVARで事前宣言しない(CatVa=%xxx_123のみ)。
+func parseFuncval(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
+	if err := expectArgs("FUNCVAL", atoms, 2); err != nil {
+		return nil, err
+	}
+	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatVa)
+	if err != nil {
+		return nil, fmt.Errorf("FUNCVALの代入先が不正です: %w", err)
+	}
+	rhs, err := atomExpr(atoms[1], funcName, closureLevel, CatCallname)
+	if err != nil {
+		return nil, fmt.Errorf("FUNCVALの対象が不正です: %w", err)
+	}
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{lhs}, Tok: token.DEFINE,
+		Rhs: []ast.Expr{rhs},
 	}, nil
 }
 

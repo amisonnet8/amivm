@@ -18,7 +18,9 @@ const (
 	CatMulti
 	CatVariable
 	CatType
-	CatDeftype
+	CatTypename
+	CatConstraint
+	CatReceiver
 	CatField
 	CatMethod
 	CatPoint
@@ -38,7 +40,8 @@ const (
 var categoryLabel = map[Category]string{
 	CatVa: "VAR変数名", CatGv: "GVAR変数名",
 	CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
-	CatVariable: "変数参照", CatType: "型", CatDeftype: "定義型",
+	CatVariable: "変数参照", CatType: "型", CatTypename: "定義型・型パラメータ名",
+	CatConstraint: "型パラメータの制約", CatReceiver: "FUNCMのレシーバー型",
 	CatField: "構造体フィールド名", CatMethod: "メソッド名", CatPoint: "ADDRのフィールド/添字対象",
 	CatWhole: "0以上の整数", CatFromTo: "スライス範囲(from/to)",
 	CatInt: "整数", CatNumber: "数値", CatBool: "真偽値",
@@ -89,7 +92,9 @@ func buildAllowedKinds() map[Category]map[Kind]bool {
 	m[CatVariable] = identRefFull
 
 	m[CatType] = typeKindsAll
-	m[CatDeftype] = kindSet(KType)
+	m[CatTypename] = kindSet(KType)
+	m[CatConstraint] = kindSet(KType, KTypeSel)
+	m[CatReceiver] = kindSet(KType, KTypePtr)
 	m[CatField] = kindSet(KField)
 	m[CatMethod] = kindSet(KMethod)
 
@@ -148,6 +153,12 @@ func checkKind(a Atom, cat Category) error {
 	}
 	if !allowedKinds[cat][a.Kind] {
 		return fmt.Errorf("%sにこの形式は使えません: %s", categoryLabel[cat], a.Raw)
+	}
+	// $0(FUNCMのレシーバー)は$Nが許容される全カテゴリで使えるが、single/multi
+	// (代入先・左辺値)だけは例外。レシーバー自体への再代入は認めない設計とするため、
+	// go/typesには委ねずここで構文的に弾く(Goの構文としては$0=...も合法なため)。
+	if a.Kind == KParam && a.A == "0" && (cat == CatSingle || cat == CatMulti) {
+		return fmt.Errorf("%sには$0(レシーバー)を使えません: %s", categoryLabel[cat], a.Raw)
 	}
 	return nil
 }

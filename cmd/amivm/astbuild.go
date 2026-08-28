@@ -20,9 +20,11 @@ func amivmFuncGoName(name string) string {
 }
 
 // amivmParamGoName / amivmLocalGoName は、関数内変数・パラメータのGo側の実名。
-// funcNameは常にAMIVM側の素の関数名("main"含む)を渡す(Go宣言名のamivmFuncGoNameとは別の変換)。
-func amivmParamGoName(funcName string, n int) string {
-	return fmt.Sprintf("%s_amivm_function_param%d", funcName, n)
+// パラメータ($N)は関数名による修飾を持たない(Goは未使用パラメータをエラーに
+// しないため、go/typesのエラーメッセージから所属関数を機械的に特定する必要が無い。
+// ローカル変数(%xxx)は未使用変数の自己修復のため引き続き関数名で修飾する)。
+func amivmParamGoName(n int) string {
+	return fmt.Sprintf("amivm_function_param%d", n)
 }
 func amivmLocalGoName(funcName, varName string) string {
 	return funcName + "_amivm_function_" + varName
@@ -40,7 +42,10 @@ func paramBaseExpr(funcName, numStr string) (ast.Expr, error) {
 		return nil, fmt.Errorf("$%sは関数定義の外では使えません", numStr)
 	}
 	n, _ := strconv.Atoi(numStr)
-	return ast.NewIdent(amivmParamGoName(funcName, n)), nil
+	if n == 0 {
+		return ast.NewIdent("amivm_method_self"), nil
+	}
+	return ast.NewIdent(amivmParamGoName(n)), nil
 }
 
 // closureParamBaseExpr は &N(自分がいるCLOS階層のN番目)/&L-N(階層Lを明示)を解決する。
@@ -82,6 +87,22 @@ func sliceTypeExpr(elt ast.Expr) ast.Expr {
 
 func chanTypeExpr(elt ast.Expr) ast.Expr {
 	return &ast.ChanType{Dir: ast.SEND | ast.RECV, Value: elt}
+}
+
+// instantiateTypeExpr は、ジェネリクス型・関数の実体化(型引数の適用)を表す式を
+// 組み立てる。引数が0個ならbaseをそのまま返す(非ジェネリクス)。1個ならast.IndexExpr、
+// 2個以上ならast.IndexListExprを使う(Goの構文がそう区別されているため)。
+// CALL/DEFER/SPAWNの明示的型引数、FUNCMレシーバーの型パラメータ再掲、GETYPEの
+// 型引数適用で共通して使う。
+func instantiateTypeExpr(base ast.Expr, args []ast.Expr) ast.Expr {
+	switch len(args) {
+	case 0:
+		return base
+	case 1:
+		return &ast.IndexExpr{X: base, Index: args[0]}
+	default:
+		return &ast.IndexListExpr{X: base, Indices: args}
+	}
 }
 
 func atomToExpr(a Atom, funcName string, closureLevel int) (ast.Expr, error) {

@@ -43,7 +43,7 @@ func blankAssignStmt(name string) ast.Stmt {
 	}
 }
 
-// declaresVarDirect は、文がVAR宣言(ast.DeclStmt, token.VAR)またはMETHODの
+// declaresVarDirect は、文がVAR宣言(ast.DeclStmt, token.VAR)またはMETHVAL/FUNCVALの
 // :=宣言(ast.AssignStmt, token.DEFINE)として指定名を直接(ネストしたブロックを
 // 覗かずに)宣言しているかを判定する。LABELで包まれた宣言(*ast.LabeledStmt)も見る。
 func declaresVarDirect(stmt ast.Stmt, varGoName string) bool {
@@ -65,8 +65,8 @@ func declaresVarDirect(stmt ast.Stmt, varGoName string) bool {
 			}
 		}
 	case *ast.AssignStmt:
-		// METHODが生成するlocal := variable.methodのような:=宣言。VARを経由しないため、
-		// ast.DeclStmtケースだけでは発見できない。
+		// METHVAL/FUNCVALが生成するlocal := variable.method / local := callnameのような
+		// :=宣言。VARを経由しないため、ast.DeclStmtケースだけでは発見できない。
 		if s.Tok != token.DEFINE {
 			return false
 		}
@@ -148,21 +148,30 @@ func insertBlankAfterDecl(fn *ast.FuncDecl, varGoName string) bool {
 // appendBlankAssignsTargeted は、未使用変数が見つかった際に `_ = x` を追加する。
 // 変数名は amivmLocalGoName の命名規則(<関数名>_amivm_function_<変数名>)に従っているため、
 // "_amivm_function_" で分割するだけで所属関数(のGo宣言名)を特定できる。
-// 該当関数・該当VAR宣言が見つからない場合のみ、安全網として全関数の末尾に追加する。
+// FUNC(!xxx)とFUNCM(レシーバー付き)は同じdefnameを使っても互いに衝突しない
+// Go宣言名になり得る(メソッドはレシーバー型で名前空間が分かれるため)一方、
+// 同名のGo宣言名を持つ*ast.FuncDeclが複数存在する可能性はゼロではないため、
+// 名前が一致する最初の1つに決め打ちせず、実際にinsertBlankAfterDeclが成功する
+// ものが見つかるまで順に試す。該当関数・該当VAR宣言が見つからない場合のみ、
+// 安全網として全関数の末尾に追加する。
 func appendBlankAssignsTargeted(f *ast.File, varNames []string) {
 	for _, name := range varNames {
 		parts := strings.SplitN(name, "_amivm_function_", 2)
 		if len(parts) == 2 {
 			funcAmivmName := parts[0]
 			goFuncName := amivmFuncGoName(funcAmivmName)
-			var target *ast.FuncDecl
+			found := false
 			for _, decl := range f.Decls {
-				if fd, ok := decl.(*ast.FuncDecl); ok && fd.Name.Name == goFuncName {
-					target = fd
+				fd, ok := decl.(*ast.FuncDecl)
+				if !ok || fd.Name.Name != goFuncName {
+					continue
+				}
+				if insertBlankAfterDecl(fd, name) {
+					found = true
 					break
 				}
 			}
-			if target != nil && insertBlankAfterDecl(target, name) {
+			if found {
 				continue
 			}
 		}

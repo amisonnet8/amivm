@@ -1,0 +1,75 @@
+// FUNCM(構造体へのレシーバー付きメソッド定義。非ジェネリクス+ジェネリクス)と
+// GETYPE(ジェネリクス型の実体化・別名宣言)のテスト。
+// FUNCMが生成するGoのメソッド名はFUNC同様<defname>_amivm_functionという命名規則に
+// 従う(>xxx/<xxxのようなraw名とは違い、!xxxは常にマングルされる)。そのため
+// METHVALでこのメソッドを値として取り出す際は<scale_amivm_functionのように
+// マングル後の名前をそのまま書く必要がある。
+STTYPE	^Circle
+	FIELD	>radius	^float64
+ENDSTTYPE
+
+FUNCM	!scale	^*Circle	^float64	:	^float64
+	VAR	%r	^float64
+	FGET	%r	$0	>radius
+	VAR	%result	^float64
+	MUL	%result	%r	$1
+	RET	%result
+ENDFUNCM
+
+STTYPE	^Box	^T	^any
+	FIELD	>value	^T
+ENDSTTYPE
+
+FUNCM	!get	^*Box	^T	:	:	^T
+	VAR	%v	^T
+	FGET	%v	$0	>value
+	RET	%v
+ENDFUNCM
+
+STTYPE	^Pair	^T	^any	^U	^any
+	FIELD	>first	^T
+	FIELD	>second	^U
+ENDSTTYPE
+
+FUNCM	!swap	^*Pair	^T	^U	:	:	^U	^T
+	VAR	%a	^U
+	VAR	%b	^T
+	FGET	%a	$0	>second
+	FGET	%b	$0	>first
+	RET	%a	%b
+ENDFUNCM
+
+// GETYPE: Box[int]/Pair[int, string]を実体化して別名を付ける(以降は普通のtypeカテゴリ
+// として使える)
+GETYPE	^BoxInt	^Box	^int
+GETYPE	^PairIntString	^Pair	^int	^string
+
+FUNC	!main	:
+	VAR	%c	^Circle
+	FSET	%c	>radius	3.0
+	VAR	%pc	^*Circle
+	ADDR	%pc	%c
+	METHVAL	%scaleFn	%pc	<scale_amivm_function
+	VAR	%scaledArea	^float64
+	CALL	%scaledArea	:	%scaleFn	2.0
+
+	VAR	%b	^BoxInt
+	FSET	%b	>value	42
+	VAR	%pb	^*BoxInt
+	ADDR	%pb	%b
+	METHVAL	%getFn	%pb	<get_amivm_function
+	VAR	%v	^int
+	CALL	%v	:	%getFn
+
+	VAR	%p	^PairIntString
+	FSET	%p	>first	1
+	FSET	%p	>second	"one"
+	VAR	%pp	^*PairIntString
+	ADDR	%pp	%p
+	METHVAL	%swapFn	%pp	<swap_amivm_function
+	VAR	%swappedFirst	^string
+	VAR	%swappedSecond	^int
+	CALL	%swappedFirst	%swappedSecond	:	%swapFn
+
+	RET
+ENDFUNC

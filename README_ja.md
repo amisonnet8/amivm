@@ -96,7 +96,7 @@ $ go run hello.go
 Hello, AMIVM!
 ```
 
-全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション)に分けて[`test_ir/`](test_ir/)に置いています。
+全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション・METHVAL/FUNCVAL・ジェネリクス関数・GETYPEを使ったジェネリクスFUNCMメソッド・INTYPEインターフェース)に分けて[`test_ir/`](test_ir/)に置いています。
 
 ## IR言語の概要
 
@@ -110,6 +110,7 @@ Hello, AMIVM!
 | `@` | パッケージレベル変数 |
 | `^` | 型名 |
 | `>` | 構造体フィールド名 |
+| `<` | メソッド名 |
 | `!` | AMIVM内定義関数名 |
 | `?` | Go関数名 |
 | `#` | ラベル名 |
@@ -125,14 +126,16 @@ Hello, AMIVM!
 - **条件分岐**: `IF`/`ELIF`/`ELSE`/`ENDIF`
 - **ループ**: `LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`
 - **型アサーション**: `ASSERT`
-- **関数**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN`
+- **関数**: `FUNC`/`ENDFUNC`, `RET`, `CALL`, `DEFER`, `SPAWN`(いずれもGoジェネリクス対応。`FUNC`は型パラメータ宣言、`CALL`/`DEFER`/`SPAWN`は明示的型引数指定ができる)
+- **メソッド・インターフェース**: `METHVAL`(メソッド値取得)、`FUNCVAL`(レシーバー無し関数値取得)、`FUNCM`/`ENDFUNCM`(レシーバー付きメソッド定義)、`INTYPE`/`METHOD`/`ENDINTYPE`(インターフェース宣言)
 - **チャネル・`select`**: `CHTYPE`, `CHMAKE`, `CHSEND`, `CHRECV`, `SEL`/`ENDSEL`, `CASESEND`, `CASERECV`, `DEFAULT`
 - **スライス**: `SLTYPE`, `SLMAKE`, `SLICE`
-- **構造体**: `STTYPE`/`ENDSTTYPE`, `FIELD`, `FSET`, `FGET`
+- **構造体**: `STTYPE`/`ENDSTTYPE`(ジェネリクス型パラメータ対応), `FIELD`, `FSET`, `FGET`
 - **map**: `MPTYPE`, `MPMAKE`, `MSET`, `MGET`, `MPKEYS`
 - **クロージャー**: `FNTYPE`, `CLOS`/`ENDCLOS`
+- **ジェネリクス型の別名宣言**: `GETYPE`(ジェネリクスな`STTYPE`/`INTYPE`を具体的な型引数で実体化し、新しい名前を付ける)
 
-メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。
+メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。`FNTYPE`で宣言した型がGoの実際のメソッド値の型と厳密に一致しない場合は、`METHVAL`/`FUNCVAL`で`:=`によりGoの型推論に任せる方法もあります。既存のメソッドを呼び出すのではなく、自分の`STTYPE`構造体に新しくメソッドを**定義**したい場合は`FUNCM`を使います。
 
 **唯一の正確な仕様は[`docs/amivm_spec.md`](docs/amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md)です。コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)を知りたい場合は、コメントを充実させてある`cmd/amivm/`配下のソースコードを直接参照してください。
 
@@ -166,11 +169,11 @@ ENDFUNC
 
 (`yourmodule`の中で、または`-o`が`yourmodule`配下を指すようにして)`amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt`を実行すると、`import xxrt "yourmodule/xxrt"`が既に入った`hello.go`が生成され、そのまま`go build`できます。
 
-**メソッド呼び出し**(例: `file.Close()`、あるいは自分の型に定義したメソッド)も、レシーバーの型が標準ライブラリのものか自分で定義したものかに関わらず同じ手順です。`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出します。`(*os.File).Close`を例にした実例が[`test_ir/16_method_call.ir`](test_ir/16_method_call.ir)にあります。
+**メソッド呼び出し**(例: `file.Close()`、あるいは自分の型に定義したメソッド)も、レシーバーの型が標準ライブラリのものか自分で定義したものかに関わらず同じ手順です。`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出します。`(*os.File).Close`を例にした実例が[`test_ir/16_method_call.ir`](test_ir/16_method_call.ir)にあります。`FNTYPE`による厳密な型宣言が難しい場合は`METHVAL`/`FUNCVAL`(`test_ir/19_methval_funcval.ir`)で`:=`により取り出す方法もあります。既存メソッドの呼び出しではなく、自分の構造体にレシーバー付きメソッドそのものを**定義**する(Goのジェネリクスにも対応)には`FUNCM`/`ENDFUNCM`を使います(`test_ir/21_funcm_getype.ir`、インターフェースとの組み合わせは`test_ir/22_intype.ir`)。
 
 ## 制約
 
-- `FUNC`はトップレベルのみに置け、関数のネストはできません。`STTYPE`も同様にネスト不可です。`IF`・`LOOP`・`CLOS`・`SEL`はいずれもネストでき、互いの中にも書けます。
+- `FUNC`/`FUNCM`はトップレベルのみに置け、関数・メソッドのネストはできません。`STTYPE`/`INTYPE`も同様にネスト不可です。`IF`・`LOOP`・`CLOS`・`SEL`はいずれもネストでき、互いの中にも書けます。
 - 配列は1次元固定長のみです。多次元配列は、(未実装の)フロントエンド側でAMIVM-IRに渡す前に1次元へ展開する前提です。
 - 意味的な正しさ(型整合性・未定義識別子・メソッドの存在チェックなど)は全て`go/types`に委ねています。AMIVM自身が保証するのは、構文的に妥当なGoコードを出力することだけです。
 
