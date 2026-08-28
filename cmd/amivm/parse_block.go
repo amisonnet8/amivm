@@ -79,17 +79,17 @@ func parseTypeParamPairs(atoms []Atom) (*ast.FieldList, error) {
 		return nil, nil
 	}
 	if len(atoms)%2 != 0 {
-		return nil, fmt.Errorf("型パラメータは名前と制約のペアで指定してください: %s", joinRaw(atoms))
+		return nil, fmt.Errorf("type parameters must be specified as name/constraint pairs: %s", joinRaw(atoms))
 	}
 	var fields []*ast.Field
 	for i := 0; i < len(atoms); i += 2 {
 		nameAtom, constraintAtom := atoms[i], atoms[i+1]
 		if err := checkKind(nameAtom, CatTypename); err != nil {
-			return nil, fmt.Errorf("型パラメータ名が不正です: %w", err)
+			return nil, fmt.Errorf("invalid type parameter name: %w", err)
 		}
 		constraintExpr, err := atomExpr(constraintAtom, "", 0, CatConstraint)
 		if err != nil {
-			return nil, fmt.Errorf("型パラメータの制約が不正です: %w", err)
+			return nil, fmt.Errorf("invalid type parameter constraint: %w", err)
 		}
 		fields = append(fields, &ast.Field{Names: []*ast.Ident{ast.NewIdent(nameAtom.A)}, Type: constraintExpr})
 	}
@@ -102,15 +102,15 @@ func parseTypeParamPairs(atoms []Atom) (*ast.FieldList, error) {
 func parseFuncSignature(line string) (defName string, typeParams *ast.FieldList, params []*ast.Field, results []*ast.Field, err error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 || atoms[0].Raw != "FUNC" {
-		return "", nil, nil, nil, fmt.Errorf("FUNC構文が不正です: %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC syntax: %s", line)
 	}
 	rest := atoms[1:]
 	if len(rest) == 0 {
-		return "", nil, nil, nil, fmt.Errorf("FUNC構文が不正です(関数名がありません): %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC syntax (missing function name): %s", line)
 	}
 	defAtom := rest[0]
 	if err := checkKind(defAtom, CatDefname); err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCの関数名が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC function name: %w", err)
 	}
 	defName, err = amivmFuncNameOf(defAtom)
 	if err != nil {
@@ -124,19 +124,19 @@ func parseFuncSignature(line string) (defName string, typeParams *ast.FieldList,
 	case 3:
 		typeParamAtoms, paramAtoms, resultAtoms = segments[0], segments[1], segments[2]
 	default:
-		return "", nil, nil, nil, fmt.Errorf("FUNC構文が不正です: %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC syntax: %s", line)
 	}
 	typeParams, err = parseTypeParamPairs(typeParamAtoms)
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCの型パラメータが不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC type parameter: %w", err)
 	}
 	results, err = typeFieldsUnnamed(resultAtoms)
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCの戻り値型が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC return type: %w", err)
 	}
 	params, err = typeFieldsNamed(paramAtoms, func(i int) string { return amivmParamGoName(i + 1) })
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCのパラメータ型が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNC parameter type: %w", err)
 	}
 	return defName, typeParams, params, results, nil
 }
@@ -147,12 +147,12 @@ func parseFuncSignature(line string) (defName string, typeParams *ast.FieldList,
 // 再掲が[T]なら *Box[T]。再掲が無ければそのままのポインタ有無で返す。
 func buildReceiverTypeExpr(recvAtom Atom, reuseAtoms []Atom) (ast.Expr, error) {
 	if err := checkKind(recvAtom, CatReceiver); err != nil {
-		return nil, fmt.Errorf("FUNCMのレシーバー型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FUNCM receiver type: %w", err)
 	}
 	var typeArgs []ast.Expr
 	for _, a := range reuseAtoms {
 		if err := checkKind(a, CatTypename); err != nil {
-			return nil, fmt.Errorf("FUNCMの型パラメータ再掲が不正です: %w", err)
+			return nil, fmt.Errorf("invalid FUNCM type parameter restatement: %w", err)
 		}
 		typeArgs = append(typeArgs, ast.NewIdent(a.A))
 	}
@@ -162,7 +162,7 @@ func buildReceiverTypeExpr(recvAtom Atom, reuseAtoms []Atom) (ast.Expr, error) {
 	case KTypePtr:
 		return &ast.StarExpr{X: instantiateTypeExpr(ast.NewIdent(recvAtom.A), typeArgs)}, nil
 	default:
-		return nil, fmt.Errorf("FUNCMのレシーバー型が不正です: %s", recvAtom.Raw)
+		return nil, fmt.Errorf("invalid FUNCM receiver type: %s", recvAtom.Raw)
 	}
 }
 
@@ -175,15 +175,15 @@ func buildReceiverTypeExpr(recvAtom Atom, reuseAtoms []Atom) (ast.Expr, error) {
 func parseFuncmSignature(line string) (defName string, recv *ast.Field, params, results []*ast.Field, err error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 || atoms[0].Raw != "FUNCM" {
-		return "", nil, nil, nil, fmt.Errorf("FUNCM構文が不正です: %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM syntax: %s", line)
 	}
 	rest := atoms[1:]
 	if len(rest) < 2 {
-		return "", nil, nil, nil, fmt.Errorf("FUNCM構文が不正です(関数名/レシーバーがありません): %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM syntax (missing function name/receiver): %s", line)
 	}
 	defAtom := rest[0]
 	if err := checkKind(defAtom, CatDefname); err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCMの関数名が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM function name: %w", err)
 	}
 	defName, err = amivmFuncNameOf(defAtom)
 	if err != nil {
@@ -198,7 +198,7 @@ func parseFuncmSignature(line string) (defName string, recv *ast.Field, params, 
 	case 3:
 		reuseAtoms, paramAtoms, resultAtoms = segments[0], segments[1], segments[2]
 	default:
-		return "", nil, nil, nil, fmt.Errorf("FUNCM構文が不正です: %s", line)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM syntax: %s", line)
 	}
 	recvTypeExpr, err := buildReceiverTypeExpr(recvAtom, reuseAtoms)
 	if err != nil {
@@ -207,11 +207,11 @@ func parseFuncmSignature(line string) (defName string, recv *ast.Field, params, 
 	recv = &ast.Field{Names: []*ast.Ident{ast.NewIdent("amivm_method_self")}, Type: recvTypeExpr}
 	results, err = typeFieldsUnnamed(resultAtoms)
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCMの戻り値型が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM return type: %w", err)
 	}
 	params, err = typeFieldsNamed(paramAtoms, func(i int) string { return amivmParamGoName(i + 1) })
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("FUNCMのパラメータ型が不正です: %w", err)
+		return "", nil, nil, nil, fmt.Errorf("invalid FUNCM parameter type: %w", err)
 	}
 	return defName, recv, params, results, nil
 }
@@ -225,29 +225,29 @@ func parseFuncmSignature(line string) (defName string, recv *ast.Field, params, 
 func parseClosSignature(line, funcName string, currentLevel int) (targetExpr ast.Expr, funcType *ast.FuncType, newLevel int, err error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 || atoms[0].Raw != "CLOS" {
-		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です: %s", line)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS syntax: %s", line)
 	}
 	rest := atoms[1:]
 	if len(rest) == 0 {
-		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です(代入先変数がありません): %s", line)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS syntax (missing assignment target variable): %s", line)
 	}
 	targetAtom := rest[0]
 	targetExpr, err = atomExpr(targetAtom, funcName, currentLevel, CatSingle)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("CLOSの代入先が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS assignment target: %w", err)
 	}
 	paramAtoms, resultAtoms, err := splitColon(rest[1:])
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("CLOS構文が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS syntax: %w", err)
 	}
 	results, err := typeFieldsUnnamed(resultAtoms)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("CLOSの戻り値型が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS return type: %w", err)
 	}
 	newLevel = currentLevel + 1
 	params, err := typeFieldsNamed(paramAtoms, func(i int) string { return closureParamGoName(newLevel, i+1) })
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("CLOSのパラメータ型が不正です: %w", err)
+		return nil, nil, 0, fmt.Errorf("invalid CLOS parameter type: %w", err)
 	}
 	funcType = &ast.FuncType{Params: &ast.FieldList{List: params}, Results: fieldListOrNil(results)}
 	return targetExpr, funcType, newLevel, nil
@@ -316,11 +316,11 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 			i = next
 			continue
 		case "ELIF", "ELSE":
-			return nil, 0, "", fmt.Errorf("%sはIFの外、またはELSEの後には使えません: %s", kw, line)
+			return nil, 0, "", fmt.Errorf("%s cannot be used outside an IF, or after an ELSE: %s", kw, line)
 		case "ENDIF":
-			return nil, 0, "", fmt.Errorf("対応するIFが見つかりません: %s", line)
+			return nil, 0, "", fmt.Errorf("no matching IF found: %s", line)
 		case "ENDLOOP":
-			return nil, 0, "", fmt.Errorf("対応するLOOPが見つかりません: %s", line)
+			return nil, 0, "", fmt.Errorf("no matching LOOP found: %s", line)
 		default:
 			stmt, err := parseSingleLine(line, funcName, closureLevel)
 			if err != nil {
@@ -332,7 +332,7 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 			i++
 		}
 	}
-	return nil, 0, "", fmt.Errorf("対応する%sが見つかりません", strings.Join(blockEnds, "または"))
+	return nil, 0, "", fmt.Errorf("no matching %s found", strings.Join(blockEnds, " or "))
 }
 
 // parseIfChain は「IF boolean1」(または再帰呼び出しでは「ELIF boolean1」)から始まる
@@ -344,12 +344,12 @@ func parseBody(lines []string, start int, funcName string, closureLevel int, blo
 func parseIfChain(lines []string, headerIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
 	atoms := tokenizeAndClassify(lines[headerIdx])
 	if len(atoms) != 2 || (atoms[0].Raw != "IF" && atoms[0].Raw != "ELIF") {
-		return nil, 0, fmt.Errorf("IF/ELIF構文が不正です(書式: IF boolean1 / ELIF boolean1): %s", lines[headerIdx])
+		return nil, 0, fmt.Errorf("invalid IF/ELIF syntax (format: IF boolean1 / ELIF boolean1): %s", lines[headerIdx])
 	}
 	kw := atoms[0].Raw
 	cond, err := atomExpr(atoms[1], funcName, closureLevel, CatBool)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%sの条件が不正です: %w", kw, err)
+		return nil, 0, fmt.Errorf("invalid %s condition: %w", kw, err)
 	}
 
 	body, next, matched, err := parseBody(lines, headerIdx+1, funcName, closureLevel, []string{"ELIF", "ELSE", "ENDIF"})
@@ -383,7 +383,7 @@ func parseIfChain(lines []string, headerIdx int, funcName string, closureLevel i
 func parseLoopBlock(lines []string, loopIdx int, funcName string, closureLevel int) (ast.Stmt, int, error) {
 	atoms := tokenizeAndClassify(lines[loopIdx])
 	if len(atoms) != 1 || atoms[0].Raw != "LOOP" {
-		return nil, 0, fmt.Errorf("LOOP構文が不正です(書式: LOOP): %s", lines[loopIdx])
+		return nil, 0, fmt.Errorf("invalid LOOP syntax (format: LOOP): %s", lines[loopIdx])
 	}
 	body, next, _, err := parseBody(lines, loopIdx+1, funcName, closureLevel, []string{"ENDLOOP"})
 	if err != nil {
@@ -401,7 +401,7 @@ func parseSelectBlock(lines []string, start int, funcName string, closureLevel i
 	i := start
 	for {
 		if i >= len(lines) {
-			return nil, 0, fmt.Errorf("対応するENDSELが見つかりません")
+			return nil, 0, fmt.Errorf("no matching ENDSEL found")
 		}
 		kw := keyword(lines[i])
 		if kw == "ENDSEL" {
@@ -426,7 +426,7 @@ func parseSelectBlock(lines []string, start int, funcName string, closureLevel i
 func parseCaseHeader(line, funcName string, closureLevel int) (ast.Stmt, error) {
 	atoms := tokenizeAndClassify(line)
 	if len(atoms) == 0 {
-		return nil, fmt.Errorf("SEL内に空行は置けません")
+		return nil, fmt.Errorf("blank lines are not allowed inside SEL")
 	}
 	switch atoms[0].Raw {
 	case "DEFAULT":
@@ -441,11 +441,11 @@ func parseCaseHeader(line, funcName string, closureLevel int) (ast.Stmt, error) 
 		}
 		ch, err := atomExpr(atoms[1], funcName, closureLevel, CatSingle)
 		if err != nil {
-			return nil, fmt.Errorf("CASESENDのチャネルが不正です: %w", err)
+			return nil, fmt.Errorf("invalid CASESEND channel: %w", err)
 		}
 		v, err := atomExpr(atoms[2], funcName, closureLevel, CatValue)
 		if err != nil {
-			return nil, fmt.Errorf("CASESENDの送信値が不正です: %w", err)
+			return nil, fmt.Errorf("invalid CASESEND send value: %w", err)
 		}
 		return &ast.SendStmt{Chan: ch, Value: v}, nil
 
@@ -460,19 +460,19 @@ func parseCaseHeader(line, funcName string, closureLevel int) (ast.Stmt, error) 
 			destAtoms = atoms[1:3]
 			chAtom = atoms[3]
 		default:
-			return nil, fmt.Errorf("CASERECV構文が不正です(書式: CASERECV l1 (l2) cs): %s", line)
+			return nil, fmt.Errorf("invalid CASERECV syntax (format: CASERECV l1 (l2) cs): %s", line)
 		}
 		var lhs []ast.Expr
 		for _, d := range destAtoms {
 			e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 			if err != nil {
-				return nil, fmt.Errorf("CASERECVの代入先が不正です: %w", err)
+				return nil, fmt.Errorf("invalid CASERECV assignment target: %w", err)
 			}
 			lhs = append(lhs, e)
 		}
 		ch, err := atomExpr(chAtom, funcName, closureLevel, CatSingle)
 		if err != nil {
-			return nil, fmt.Errorf("CASERECVのチャネルが不正です: %w", err)
+			return nil, fmt.Errorf("invalid CASERECV channel: %w", err)
 		}
 		return &ast.AssignStmt{
 			Lhs: lhs, Tok: token.ASSIGN,
@@ -480,7 +480,7 @@ func parseCaseHeader(line, funcName string, closureLevel int) (ast.Stmt, error) 
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("SEL内で使えるのはCASESEND/CASERECV/DEFAULTのみです: %s", line)
+		return nil, fmt.Errorf("only CASESEND/CASERECV/DEFAULT can be used inside SEL: %s", line)
 	}
 }
 
@@ -499,7 +499,7 @@ func parseStructBlock(lines []string, start int) (*ast.StructType, int, error) {
 			continue
 		}
 		if kw != "FIELD" {
-			return nil, 0, fmt.Errorf("STTYPE内で使えるのはFIELDのみです: %s", line)
+			return nil, 0, fmt.Errorf("only FIELD can be used inside STTYPE: %s", line)
 		}
 		atoms := tokenizeAndClassify(line)
 		if err := expectArgs("FIELD", atoms[1:], 2); err != nil {
@@ -507,16 +507,16 @@ func parseStructBlock(lines []string, start int) (*ast.StructType, int, error) {
 		}
 		fieldAtom, typeAtom := atoms[1], atoms[2]
 		if fieldAtom.Kind != KField {
-			return nil, 0, fmt.Errorf("FIELDのフィールド名が不正です: %s", fieldAtom.Raw)
+			return nil, 0, fmt.Errorf("invalid FIELD field name: %s", fieldAtom.Raw)
 		}
 		typExpr, err := atomExpr(typeAtom, "", 0, CatType)
 		if err != nil {
-			return nil, 0, fmt.Errorf("FIELDの型が不正です: %w", err)
+			return nil, 0, fmt.Errorf("invalid FIELD type: %w", err)
 		}
 		fields = append(fields, &ast.Field{Names: []*ast.Ident{ast.NewIdent(fieldAtom.A)}, Type: typExpr})
 		i++
 	}
-	return nil, 0, fmt.Errorf("対応するENDSTTYPEが見つかりません")
+	return nil, 0, fmt.Errorf("no matching ENDSTTYPE found")
 }
 
 // parseInterfaceBlock は INTYPE の本体(METHOD行の並び)をENDINTYPEまで読み取る。
@@ -540,28 +540,28 @@ func parseInterfaceBlock(lines []string, start int) (*ast.InterfaceType, int, er
 			continue
 		}
 		if kw != "METHOD" {
-			return nil, 0, fmt.Errorf("INTYPE内で使えるのはMETHODのみです: %s", line)
+			return nil, 0, fmt.Errorf("only METHOD can be used inside INTYPE: %s", line)
 		}
 		atoms := tokenizeAndClassify(line)
 		rest := atoms[1:]
 		if len(rest) == 0 {
-			return nil, 0, fmt.Errorf("METHOD構文が不正です(メソッド名がありません): %s", line)
+			return nil, 0, fmt.Errorf("invalid METHOD syntax (missing method name): %s", line)
 		}
 		methodAtom := rest[0]
 		if methodAtom.Kind != KMethod {
-			return nil, 0, fmt.Errorf("METHODのメソッド名が不正です: %s", methodAtom.Raw)
+			return nil, 0, fmt.Errorf("invalid METHOD method name: %s", methodAtom.Raw)
 		}
 		paramAtoms, resultAtoms, err := splitColon(rest[1:])
 		if err != nil {
-			return nil, 0, fmt.Errorf("METHOD構文が不正です: %w", err)
+			return nil, 0, fmt.Errorf("invalid METHOD syntax: %w", err)
 		}
 		params, err := typeFieldsUnnamed(paramAtoms)
 		if err != nil {
-			return nil, 0, fmt.Errorf("METHODのパラメータ型が不正です: %w", err)
+			return nil, 0, fmt.Errorf("invalid METHOD parameter type: %w", err)
 		}
 		results, err := typeFieldsUnnamed(resultAtoms)
 		if err != nil {
-			return nil, 0, fmt.Errorf("METHODの戻り値型が不正です: %w", err)
+			return nil, 0, fmt.Errorf("invalid METHOD return type: %w", err)
 		}
 		methods = append(methods, &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(methodAtom.A)},
@@ -569,7 +569,7 @@ func parseInterfaceBlock(lines []string, start int) (*ast.InterfaceType, int, er
 		})
 		i++
 	}
-	return nil, 0, fmt.Errorf("対応するENDINTYPEが見つかりません")
+	return nil, 0, fmt.Errorf("no matching ENDINTYPE found")
 }
 
 // parseChType/parseSlType/parseMpType/parseFnType はトップレベルのTYPE系宣言
@@ -580,11 +580,11 @@ func parseChType(atoms []Atom) (ast.Decl, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatTypename); err != nil {
-		return nil, fmt.Errorf("CHTYPEの型名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid CHTYPE type name: %w", err)
 	}
 	elemExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("CHTYPEの要素型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid CHTYPE element type: %w", err)
 	}
 	return typeDecl(atoms[0].A, nil, chanTypeExpr(elemExpr)), nil
 }
@@ -594,11 +594,11 @@ func parseSlType(atoms []Atom) (ast.Decl, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatTypename); err != nil {
-		return nil, fmt.Errorf("SLTYPEの型名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLTYPE type name: %w", err)
 	}
 	elemExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("SLTYPEの要素型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLTYPE element type: %w", err)
 	}
 	return typeDecl(atoms[0].A, nil, sliceTypeExpr(elemExpr)), nil
 }
@@ -608,38 +608,38 @@ func parseMpType(atoms []Atom) (ast.Decl, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatTypename); err != nil {
-		return nil, fmt.Errorf("MPTYPEの型名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPTYPE type name: %w", err)
 	}
 	keyExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("MPTYPEのキー型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPTYPE key type: %w", err)
 	}
 	valExpr, err := atomExpr(atoms[2], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("MPTYPEの値型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPTYPE value type: %w", err)
 	}
 	return typeDecl(atoms[0].A, nil, &ast.MapType{Key: keyExpr, Value: valExpr}), nil
 }
 
 func parseFnType(atoms []Atom) (ast.Decl, error) {
 	if len(atoms) == 0 {
-		return nil, fmt.Errorf("FNTYPE構文が不正です(型名がありません)")
+		return nil, fmt.Errorf("invalid FNTYPE syntax (missing type name)")
 	}
 	deftypeAtom := atoms[0]
 	if err := checkKind(deftypeAtom, CatTypename); err != nil {
-		return nil, fmt.Errorf("FNTYPEの型名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FNTYPE type name: %w", err)
 	}
 	paramAtoms, resultAtoms, err := splitColon(atoms[1:])
 	if err != nil {
-		return nil, fmt.Errorf("FNTYPE構文が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FNTYPE syntax: %w", err)
 	}
 	params, err := typeFieldsUnnamed(paramAtoms)
 	if err != nil {
-		return nil, fmt.Errorf("FNTYPEのパラメータ型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FNTYPE parameter type: %w", err)
 	}
 	results, err := typeFieldsUnnamed(resultAtoms)
 	if err != nil {
-		return nil, fmt.Errorf("FNTYPEの戻り値型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FNTYPE return type: %w", err)
 	}
 	ft := &ast.FuncType{Params: &ast.FieldList{List: params}, Results: fieldListOrNil(results)}
 	return typeDecl(deftypeAtom.A, nil, ft), nil
@@ -651,18 +651,18 @@ func parseFnType(atoms []Atom) (ast.Decl, error) {
 // (1個以上必須)。
 func parseGetype(atoms []Atom) (ast.Decl, error) {
 	if len(atoms) < 3 {
-		return nil, fmt.Errorf("GETYPE構文が不正です(書式: GETYPE typename1 typename2 type1 ...): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid GETYPE syntax (format: GETYPE typename1 typename2 type1 ...): %s", joinRaw(atoms))
 	}
 	aliasAtom, targetAtom, typeArgAtoms := atoms[0], atoms[1], atoms[2:]
 	if err := checkKind(aliasAtom, CatTypename); err != nil {
-		return nil, fmt.Errorf("GETYPEの別名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid GETYPE alias: %w", err)
 	}
 	if err := checkKind(targetAtom, CatTypename); err != nil {
-		return nil, fmt.Errorf("GETYPEの対象型名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid GETYPE target type name: %w", err)
 	}
 	typeArgs, err := typeExprList(typeArgAtoms)
 	if err != nil {
-		return nil, fmt.Errorf("GETYPEの型引数が不正です: %w", err)
+		return nil, fmt.Errorf("invalid GETYPE type argument: %w", err)
 	}
 	target := instantiateTypeExpr(ast.NewIdent(targetAtom.A), typeArgs)
 	return typeAliasDecl(aliasAtom.A, target), nil

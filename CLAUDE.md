@@ -28,16 +28,16 @@ Goの並行処理(goroutine/channel)を中間言語に直接取り込んでい�
 
 | ファイル | 役割 |
 |---|---|
-| `docs/amivm_spec.md` | **唯一の正確な仕様。** プロジェクト概要+IR命令セットの全体を体系立てて記載(旧`PJ.txt`+`IR.txt`の統合・後継。両ファイルは削除済み) |
-| `docs/amivm_instruction_spec.md` | `amivm_spec.md`と同じ内容を、設計判断の理由・変更の経緯まで含めて解説したもの |
+| `amivm_spec.md` | **唯一の正確な仕様。** プロジェクト概要+IR命令セットの全体を体系立てて記載(旧`PJ.txt`+`IR.txt`の統合・後継。両ファイルは削除済み) |
+| `amivm_instruction_spec.md` | `amivm_spec.md`と同じ内容を、設計判断の理由・変更の経緯まで含めて解説したもの |
 | `README.md` / `README_ja.md` | GitHub向けの導入ドキュメント(英語版/日本語版) |
-| `test_ir/` | 命令カテゴリ別のサンプルIR。新しい命令・構文を実装したら対応するファイルを追加・更新して`go build`まで通すこと |
+| `examples/` | 命令カテゴリ別のサンプルIR。新しい命令・構文を実装したら対応するファイルを追加・更新して`go build`まで通すこと |
 | `CLAUDE.md` | 本ファイル。AIによる開発支援のための規約・注意点 |
-| `.github/workflows/test.yml` | GitHub Actions。push/PR時に`gofmt`・`go vet`・`go test`・`make test`(test_ir一括検証)を自動実行する |
+| `.github/workflows/test.yml` | GitHub Actions。push/PR時に`gofmt`・`go vet`・`go test`・`make test`(examples一括検証)を自動実行する |
 
-以降の節で単に`amivm_spec.md`のようにファイル名だけで参照している箇所は、いずれも`docs/`配下を指す。
+以降の節で単に`amivm_spec.md`のようにファイル名だけで参照している箇所は、いずれもリポジトリ直下を指す(旧`docs/`配下から移動済み)。
 
-**`docs/amivm_code_design.md`(コンパイラ内部実装の設計メモ)は削除済みで、復活させない。** 仕様変更のたびに実装詳細(関数シグネチャ・コードスニペット等)まで追随させる修正コストが見合わないと判断されたため。コンパイラ内部の実装詳細を知りたい場合は`cmd/amivm/`のソースコード(コメント含む)を直接参照すること。新しいドキュメントで同種の内容を作らないこと。
+**`amivm_code_design.md`(コンパイラ内部実装の設計メモ)は削除済みで、復活させない。** 仕様変更のたびに実装詳細(関数シグネチャ・コードスニペット等)まで追随させる修正コストが見合わないと判断されたため。コンパイラ内部の実装詳細を知りたい場合は`cmd/amivm/`のソースコード(コメント含む)を直接参照すること。新しいドキュメントで同種の内容を作らないこと。
 
 ## 仕様の正(source of truth)
 
@@ -54,13 +54,15 @@ Goの並行処理(goroutine/channel)を中間言語に直接取り込んでい�
 ## CLIコマンド仕様
 
 ```
-amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]...
+amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]... [-h|--help]
 ```
 
 - `-o`省略時の出力先は、IRファイルパスの拡張子を`.go`に置き換えたパス(拡張子が無ければ`.go`を付け足したパス)
 - `-v`/`--verbose`を付けると元のIR・型チェックの過程(未使用変数の自己修復ログ含む)・最終的な生成コード・完了メッセージを標準出力に表示する。付けない場合、成功時は何も出力しない
 - `-i`/`--import <名前>=<importパス>`は繰り返し指定できる。短縮形と長形式は完全に同じ意味を持つ。指定した名前が生成コード内で`?<名前>.xxx`のように参照されていれば、`import <名前> "<importパス>"`という明示的なimportを生成コードに追加する。利用側言語実装(xxlang等)が用意する独自のランタイムライブラリのように、goimportsの自動推測(識別子だけからimportパスを当てる仕組み)が信頼できないパッケージ(標準ライブラリでも既に参照済みのパッケージでもないもの)を呼びたい場合に使う。指定した名前が実際には使われていない場合は、goimportsによって通常の未使用import除去と同じ仕組みで自動的に取り除かれるため、同じマッピング一式を複数のIRファイルに対して使い回しても問題ない
+- `-h`/`--help`を付けると使い方を標準出力に表示して終了する(終了コード0)。他の引数の妥当性検証より先に判定するため、`<IRファイルパス>`を指定しない`amivm -h`単体の呼び出しでも動作する
 - ファイル読み込み失敗・IRパースエラー・型チェック失敗などのエラーは`-v`/`--verbose`の有無に関わらず常に出力する
+- amivmが標準出力・標準エラーに出す文言(使い方・エラーメッセージ等)は日本語ではなく英語で統一する(本`CLAUDE.md`自体やコード中のコメント・コミットメッセージは対象外で、従来どおり日本語のままでよい)
 - `go build`による実行ファイル生成は行わない(前述のとおり別工程)
 
 詳細は`cmd/amivm/main.go`を参照。
@@ -138,13 +140,13 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 2. `FGET`で、その構造体変数からメソッドを**値(Goのメソッド値)として取り出す**(`FGET single variable field → single = variable.field`と同じ構文だが、`field`がメソッド名の場合はメソッド値の取得になる)
 3. 取り出したメソッド値を`%`(ローカル変数)に保持し、`CALL`の呼び出し対象としてそのまま使う
 
-これが、`callname`カテゴリに`!xxx`/`!main`/`?xxx`/`?xxx.xxx`だけでなく`%xxx`(ローカル変数)も含まれている理由。`%xxx`は「変数に格納された関数値(メソッド値・クロージャーを含む)」を呼び出すケースに対応する。`test_ir/16_method_call.ir`に`(*os.File).Close`を例にした実例がある。同じ理由で`$N`/`&N`(パラメータ・クロージャー引数)、`@xxx`(パッケージレベル変数)も`callname`に含まれる。クロージャーをパラメータとして受け取った関数の中で、それをそのまま呼び出せるようにするためで、以前はこれが抜けていた(仕様ミス)。`test_ir/15_closure.ir`に実例がある。
+これが、`callname`カテゴリに`!xxx`/`!main`/`?xxx`/`?xxx.xxx`だけでなく`%xxx`(ローカル変数)も含まれている理由。`%xxx`は「変数に格納された関数値(メソッド値・クロージャーを含む)」を呼び出すケースに対応する。`examples/16_method_call.ir`に`(*os.File).Close`を例にした実例がある。同じ理由で`$N`/`&N`(パラメータ・クロージャー引数)、`@xxx`(パッケージレベル変数)も`callname`に含まれる。クロージャーをパラメータとして受け取った関数の中で、それをそのまま呼び出せるようにするためで、以前はこれが抜けていた(仕様ミス)。`examples/15_closure.ir`に実例がある。
 
-上記の`FNTYPE`+`FGET`パターンには弱点がある。`FGET`は`=`(既存変数への代入)なので、代入先の`%closeFn`をあらかじめ`VAR %closeFn ^CloseFn`で宣言しておく必要があり、`^CloseFn`(`FNTYPE`宣言)がGoの実際のメソッド値の型と寸分たがわず一致していないと`go/types`が代入エラーを返す。概念上は同じ型のつもりでも、Goの型同一性は名前まで含めて厳密なため、この不一致が実際に起きた。対処として`METHVAL local variable method`(`local := variable.method`。旧命令名は`METHOD`)を追加した。`FNTYPE`による事前の型宣言を要求せず、Goの`:=`にメソッド値の型をそのまま推論させることで、この不一致を構造的に起こらなくしている。`local`は`VAR`で事前宣言してはならない(`:=`は左辺の少なくとも1つが新規変数であることを要求するため)。`FNTYPE`の型が実際の型と一致すると分かっている場合は`FGET`、型の一致を気にせずGoに任せたい場合は`METHVAL`、という使い分けになる。`test_ir/19_methval_funcval.ir`に実例がある。同じ理由・同じ`:=`の仕組みでレシーバー無し版の`FUNCVAL local callname`(`local := callname`)も追加した(同ファイルに実例がある)。
+上記の`FNTYPE`+`FGET`パターンには弱点がある。`FGET`は`=`(既存変数への代入)なので、代入先の`%closeFn`をあらかじめ`VAR %closeFn ^CloseFn`で宣言しておく必要があり、`^CloseFn`(`FNTYPE`宣言)がGoの実際のメソッド値の型と寸分たがわず一致していないと`go/types`が代入エラーを返す。概念上は同じ型のつもりでも、Goの型同一性は名前まで含めて厳密なため、この不一致が実際に起きた。対処として`METHVAL local variable method`(`local := variable.method`。旧命令名は`METHOD`)を追加した。`FNTYPE`による事前の型宣言を要求せず、Goの`:=`にメソッド値の型をそのまま推論させることで、この不一致を構造的に起こらなくしている。`local`は`VAR`で事前宣言してはならない(`:=`は左辺の少なくとも1つが新規変数であることを要求するため)。`FNTYPE`の型が実際の型と一致すると分かっている場合は`FGET`、型の一致を気にせずGoに任せたい場合は`METHVAL`、という使い分けになる。`examples/19_methval_funcval.ir`に実例がある。同じ理由・同じ`:=`の仕組みでレシーバー無し版の`FUNCVAL local callname`(`local := callname`)も追加した(同ファイルに実例がある)。
 
-`CLOS`の代入先は専用カテゴリを持たず、`single1`(`$N`/`&N`/`%xxx`/`@xxx`を許容する既存カテゴリ)をそのまま流用する。パラメータや`GVAR`で宣言済みのパッケージレベル変数にもクロージャーを代入できる(`test_ir/15_closure.ir`に`$1`・`@globalAdder`への代入例がある)。`&N`/`&L-N`も代入先として使える。これは`CLOS`をネストできるようにしたことに対応していて、内側の`CLOS`から見れば外側の`CLOS`のクロージャー引数も「既に存在する、代入し直せる変数」という点で`$N`と変わらないため(`test_ir/15_closure.ir`の`!curry3`に、ネストした`CLOS`から外側・内側それぞれの階層のクロージャー引数を参照する実例がある)。
+`CLOS`の代入先は専用カテゴリを持たず、`single1`(`$N`/`&N`/`%xxx`/`@xxx`を許容する既存カテゴリ)をそのまま流用する。パラメータや`GVAR`で宣言済みのパッケージレベル変数にもクロージャーを代入できる(`examples/15_closure.ir`に`$1`・`@globalAdder`への代入例がある)。`&N`/`&L-N`も代入先として使える。これは`CLOS`をネストできるようにしたことに対応していて、内側の`CLOS`から見れば外側の`CLOS`のクロージャー引数も「既に存在する、代入し直せる変数」という点で`$N`と変わらないため(`examples/15_closure.ir`の`!curry3`に、ネストした`CLOS`から外側・内側それぞれの階層のクロージャー引数を参照する実例がある)。
 
-`METHVAL`/`FGET`は、既に存在するメソッドを**値として取り出す**だけで、メソッドそのものを**定義**する手段ではない。`STTYPE`で宣言した構造体にGoのネイティブなレシーバー付きメソッドを定義するには`FUNCM`/`ENDFUNCM`を使う(本体内でレシーバーは`$0`)。インターフェース型の宣言は`INTYPE`/`METHOD`(シグネチャ専用。値取得の`METHVAL`とはキーワードが同じだが別命令で、出現文脈が排他的なので衝突しない)/`ENDINTYPE`。`FUNC`/`FUNCM`/`STTYPE`/`INTYPE`のジェネリクス(型パラメータ)対応、`CALL`/`DEFER`/`SPAWN`の明示的型引数、ジェネリクス型の実体化・別名宣言(`GETYPE`)の詳細は`docs/amivm_instruction_spec.md`の該当節を参照(`test_ir/20_generics_func.ir`・`test_ir/21_funcm_getype.ir`・`test_ir/22_intype.ir`に実例がある)。
+`METHVAL`/`FGET`は、既に存在するメソッドを**値として取り出す**だけで、メソッドそのものを**定義**する手段ではない。`STTYPE`で宣言した構造体にGoのネイティブなレシーバー付きメソッドを定義するには`FUNCM`/`ENDFUNCM`を使う(本体内でレシーバーは`$0`)。インターフェース型の宣言は`INTYPE`/`METHOD`(シグネチャ専用。値取得の`METHVAL`とはキーワードが同じだが別命令で、出現文脈が排他的なので衝突しない)/`ENDINTYPE`。`FUNC`/`FUNCM`/`STTYPE`/`INTYPE`のジェネリクス(型パラメータ)対応、`CALL`/`DEFER`/`SPAWN`の明示的型引数、ジェネリクス型の実体化・別名宣言(`GETYPE`)の詳細は`amivm_instruction_spec.md`の該当節を参照(`examples/20_generics_func.ir`・`examples/21_funcm_getype.ir`・`examples/22_intype.ir`に実例がある)。
 
 ## 実装のファイル構成
 
@@ -167,12 +169,12 @@ amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verb
 
 ## 現在の実装状況
 
-上記の実装は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`CLOS`・`IF`/`ELIF`/`ELSE`/`ENDIF`・`LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`・`ASSERT`・`METHVAL`/`FUNCVAL`・`FUNCM`/`ENDFUNCM`・`INTYPE`/`METHOD`/`ENDINTYPE`・`FUNC`/`CALL`/`DEFER`/`SPAWN`/`STTYPE`/`INTYPE`のジェネリクス対応・`GETYPE`・CLIの`-o`/`-v`/`-i`など)。`test_ir/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
+上記の実装は`amivm_spec.md`の内容を実装済み(全命令・`:`区切り構文・`CASESEND`/`CASERECV`・`TYPE`系宣言・`CLOS`・`IF`/`ELIF`/`ELSE`/`ENDIF`・`LOOP`/`BREAK`/`CONTINUE`/`ENDLOOP`・`ASSERT`・`METHVAL`/`FUNCVAL`・`FUNCM`/`ENDFUNCM`・`INTYPE`/`METHOD`/`ENDINTYPE`・`FUNC`/`CALL`/`DEFER`/`SPAWN`/`STTYPE`/`INTYPE`のジェネリクス対応・`GETYPE`・CLIの`-o`/`-v`/`-i`など)。`examples/`配下に命令カテゴリ別の動作確認済みサンプルがある。新しい命令や構文上の変更を加えるときは、対応するテストIRを追加・更新し、実際に`amivm_spec.md`を更新した上でその内容が実装と一致していることを確認すること。
 
 ## 開発の進め方
 
 1. `amivm_spec.md`の命令一覧・カテゴリ表・Kind一覧を正として実装する
-2. 実装したら実際に`go build`(および可能なら生成したGoコードの`go build`・実行)で動作確認する。**このプロジェクトは「動かして初めて見つかるバグ」が実際に複数回発生している**(前節参照)。ロジック上正しそうに見えても、必ず`test_ir/`のサンプルを通して確認すること(`make test`で一括検証できる。生成物は一時ディレクトリに書き出すため、リポジトリ直下を汚さない)
+2. 実装したら実際に`go build`(および可能なら生成したGoコードの`go build`・実行)で動作確認する。**このプロジェクトは「動かして初めて見つかるバグ」が実際に複数回発生している**(前節参照)。ロジック上正しそうに見えても、必ず`examples/`のサンプルを通して確認すること(`make test`で一括検証できる。生成物は一時ディレクトリに書き出すため、リポジトリ直下を汚さない)
 3. `amivm_spec.md`と矛盾する挙動を見つけたら、まず`amivm_spec.md`側の記述を疑い、仕様として確定してからコードを直す
-4. 仕様(`amivm_spec.md`)を変更したら、`amivm_instruction_spec.md`・README・`test_ir/`のうち影響を受ける箇所も同じタイミングで更新する(ドキュメント間の不整合を残さない)
+4. 仕様(`amivm_spec.md`)を変更したら、`amivm_instruction_spec.md`・README・`examples/`のうち影響を受ける箇所も同じタイミングで更新する(ドキュメント間の不整合を残さない)
 5. `.github/workflows/test.yml`によりpush/PR時に`gofmt`・`go vet`・`go test`・`make test`がGitHub Actionsで自動実行される。ローカルでこれらを一通り確認してからpushすること(CIで初めて失敗に気づくのは避ける)

@@ -16,7 +16,33 @@ import (
 // エントリポイント
 // =====================================================================
 
-const usage = "使い方: amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]..."
+const usage = "Usage: amivm <ir-file-path> [-o|--output <output-file-path>] [-v|--verbose] [-i|--import <name>=<import-path>]... [-h|--help]"
+
+const helpText = usage + `
+
+amivm compiles an AMIVM-IR file into Go source code.
+
+Arguments:
+  <ir-file-path>                Path to the AMIVM-IR file to compile
+
+Options:
+  -o, --output <path>           Output file path (default: <ir-file-path> with its extension replaced by .go)
+  -v, --verbose                 Print the input IR, the unused-variable self-repair log, and the final generated code
+  -i, --import <name>=<path>    Add an explicit import "<path>" bound to <name> in the generated code; may be repeated
+  -h, --help                    Show this help message and exit
+`
+
+// hasHelpFlag は引数リストに -h/--help が含まれるかを調べる。
+// -h/--help は他のオプションの妥当性(name=path形式など)より先にチェックし、
+// <IRファイルパス>を伴わない`amivm -h`のような呼び出しでもヘルプを表示できるようにする。
+func hasHelpFlag(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}
 
 // deriveOutputPath は -o 未指定時の出力パスを決める。
 // IRファイルパスの拡張子を.goに置き換える。拡張子が無ければ.goを付け足す。
@@ -35,14 +61,14 @@ var reImportName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 func parseImportArg(raw string) (name, path string, err error) {
 	idx := strings.Index(raw, "=")
 	if idx < 0 {
-		return "", "", fmt.Errorf("-i/--importの形式が不正です(name=path形式で指定してください): %s", raw)
+		return "", "", fmt.Errorf("invalid -i/--import format (expected name=path): %s", raw)
 	}
 	name, path = raw[:idx], raw[idx+1:]
 	if !reImportName.MatchString(name) {
-		return "", "", fmt.Errorf("-i/--importの名前が不正です(Goの識別子である必要があります): %s", name)
+		return "", "", fmt.Errorf("invalid -i/--import name (must be a valid Go identifier): %s", name)
 	}
 	if path == "" {
-		return "", "", fmt.Errorf("-i/--importのimportパスが空です: %s", raw)
+		return "", "", fmt.Errorf("empty import path for -i/--import: %s", raw)
 	}
 	return name, path, nil
 }
@@ -57,7 +83,7 @@ func parseArgs(args []string) (irPath, outPath string, verbose bool, importMap m
 		switch args[i] {
 		case "-o", "--output":
 			if i+1 >= len(args) {
-				return "", "", false, nil, fmt.Errorf("-o/--outputオプションには出力ファイルパスの指定が必要です")
+				return "", "", false, nil, fmt.Errorf("-o/--output requires an output file path")
 			}
 			i++
 			outPath = args[i]
@@ -65,7 +91,7 @@ func parseArgs(args []string) (irPath, outPath string, verbose bool, importMap m
 			verbose = true
 		case "-i", "--import":
 			if i+1 >= len(args) {
-				return "", "", false, nil, fmt.Errorf("-i/--importオプションにはname=path形式の指定が必要です")
+				return "", "", false, nil, fmt.Errorf("-i/--import requires a name=path argument")
 			}
 			i++
 			name, path, parseErr := parseImportArg(args[i])
@@ -73,21 +99,21 @@ func parseArgs(args []string) (irPath, outPath string, verbose bool, importMap m
 				return "", "", false, nil, parseErr
 			}
 			if _, dup := importMap[name]; dup {
-				return "", "", false, nil, fmt.Errorf("-i/--importで同じ名前が複数回指定されています: %s", name)
+				return "", "", false, nil, fmt.Errorf("duplicate name specified for -i/--import: %s", name)
 			}
 			importMap[name] = path
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return "", "", false, nil, fmt.Errorf("不明なオプションです: %s", args[i])
+				return "", "", false, nil, fmt.Errorf("unknown option: %s", args[i])
 			}
 			if irPath != "" {
-				return "", "", false, nil, fmt.Errorf("IRファイルパスは1つだけ指定してください: %s", args[i])
+				return "", "", false, nil, fmt.Errorf("only one IR file path may be specified: %s", args[i])
 			}
 			irPath = args[i]
 		}
 	}
 	if irPath == "" {
-		return "", "", false, nil, fmt.Errorf("IRファイルパスを指定してください")
+		return "", "", false, nil, fmt.Errorf("an IR file path must be specified")
 	}
 	return irPath, outPath, verbose, importMap, nil
 }
@@ -120,6 +146,11 @@ func injectExplicitImports(file *ast.File, importMap map[string]string) {
 }
 
 func main() {
+	if hasHelpFlag(os.Args[1:]) {
+		fmt.Print(helpText)
+		return
+	}
+
 	irPath, outPath, verbose, importMap, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)
@@ -132,7 +163,7 @@ func main() {
 
 	irBytes, err := os.ReadFile(irPath)
 	if err != nil {
-		fmt.Printf("IRファイル読み込み失敗 (%s): %v\n", irPath, err)
+		fmt.Printf("failed to read IR file (%s): %v\n", irPath, err)
 		os.Exit(1)
 	}
 	irSource := string(irBytes)
@@ -144,13 +175,13 @@ func main() {
 
 	file, err := buildProgram(irSource)
 	if err != nil {
-		fmt.Println("IRパースエラー:", err)
+		fmt.Println("IR parse error:", err)
 		os.Exit(1)
 	}
 
 	if len(importMap) > 0 {
 		if verbose {
-			fmt.Println("=== -i/--importで指定された明示的import ===")
+			fmt.Println("=== explicit imports specified via -i/--import ===")
 			for name, path := range importMap {
 				fmt.Printf("%s = %q\n", name, path)
 			}
@@ -159,11 +190,11 @@ func main() {
 	}
 
 	if err := generateOutput(file, outPath, verbose); err != nil {
-		fmt.Println("エラー:", err)
+		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
 	if verbose {
-		fmt.Printf("生成成功: %s\n", outPath)
+		fmt.Printf("generated successfully: %s\n", outPath)
 	}
 }

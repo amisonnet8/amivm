@@ -34,7 +34,7 @@ AMIVM自身の責務はGoソースファイルを出力するところまでで�
 go build -o amivm ./cmd/amivm
 ```
 
-または同梱の`Makefile`を使う(`make help`で全ターゲット一覧を表示。`test`は`test_ir/`配下の全サンプルをコンパイラに通す)。
+または同梱の`Makefile`を使う(`make help`で全ターゲット一覧を表示。`test`は`examples/`配下の全サンプルをコンパイラに通す)。
 
 ```sh
 make build
@@ -59,13 +59,14 @@ make install   # go install ./cmd/amivm — $GOBIN(未設定なら$GOPATH/bin)�
 ## 使い方
 
 ```
-amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]...
+amivm <IRファイルパス> [-o|--output <出力ファイルパス>] [-v|--verbose] [-i|--import <名前>=<importパス>]... [-h|--help]
 ```
 
 | オプション | 説明 |
 |---|---|
 | `-o <出力ファイルパス>`, `--output <出力ファイルパス>` | 生成したGoファイルの出力先。省略時は`<IRファイルパス>`の拡張子を`.go`に置き換えたパス(拡張子が無ければ`.go`を付け足したパス)になる。 |
 | `-v`, `--verbose` | 処理内容(元のIR・未使用変数の自己修復ログ・最終的な生成コード・成功メッセージ)を表示する。付けない場合、成功時は何も出力しない(エラーは`-v`の有無に関わらず常に出力される)。 |
+| `-h`, `--help` | 使い方を表示して終了する。他の全オプションより優先されるため、`<IRファイルパス>`を指定しなくても`amivm -h`は動作する。 |
 | `-i <名前>=<importパス>`, `--import <名前>=<importパス>` | 繰り返し指定可能。指定した名前・パスの組で`import <名前> "<importパス>"`という明示的なimportを生成コードにあらかじめ追加する。`?<名前>.Func`という呼び出しがそのimportを直接使うようになり、goimportsが裸の識別子からimportパスを推測する(標準ライブラリや既に参照済みのパッケージ以外では信頼できない)処理を経由しなくて済む。下流のプロジェクト(AMIVM-IRを出力するフロントエンド言語実装等)が用意した独自のGoライブラリを呼びたい場合に使う。生成コード内で結局使われなかった名前は自動的に取り除かれるため、同じ`-i`/`--import`の組を全てのIRファイルに対して使い回しても問題ない。 |
 
 ## 例
@@ -81,7 +82,7 @@ ENDFUNC
 $ amivm hello.ir -v
 === IR ===
 ...
-=== 最終生成コード ===
+=== final generated code ===
 package main
 
 import "fmt"
@@ -91,12 +92,12 @@ func main() {
 	return
 }
 
-生成成功: hello.go
+generated successfully: hello.go
 $ go run hello.go
 Hello, AMIVM!
 ```
 
-全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション・METHVAL/FUNCVAL・ジェネリクス関数・GETYPEを使ったジェネリクスFUNCMメソッド・INTYPEインターフェース)に分けて[`test_ir/`](test_ir/)に置いています。
+全命令を網羅した実行可能なサンプルを、カテゴリ別(変数定義・通常演算・ビット演算・シフト演算・論理演算・比較演算・文字列操作・ポインタ・配列とGOTOによるループ・関数とDEFER・goroutine/channel/SEL・スライス・構造体・map・クロージャー・Goメソッド呼び出し・構造化されたIF/LOOP制御フロー・型アサーション・METHVAL/FUNCVAL・ジェネリクス関数・GETYPEを使ったジェネリクスFUNCMメソッド・INTYPEインターフェース)に分けて[`examples/`](examples/)に置いています。
 
 ## IR言語の概要
 
@@ -137,7 +138,7 @@ Hello, AMIVM!
 
 メソッド呼び出し(例: `file.Close()`)は、`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出すという形で表現します。`FNTYPE`で宣言した型がGoの実際のメソッド値の型と厳密に一致しない場合は、`METHVAL`/`FUNCVAL`で`:=`によりGoの型推論に任せる方法もあります。既存のメソッドを呼び出すのではなく、自分の`STTYPE`構造体に新しくメソッドを**定義**したい場合は`FUNCM`を使います。
 
-**唯一の正確な仕様は[`docs/amivm_spec.md`](docs/amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md)です。コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)を知りたい場合は、コメントを充実させてある`cmd/amivm/`配下のソースコードを直接参照してください。
+**唯一の正確な仕様は[`amivm_spec.md`](amivm_spec.md)です。** 本READMEを含む他のドキュメントと矛盾する場合は`amivm_spec.md`を優先してください。同じ仕様を設計判断の理由まで含めてより読みやすく解説したものが[`amivm_instruction_spec.md`](amivm_instruction_spec.md)です。コンパイラ内部の実装(ファイル構成・トークナイズ・`Kind`/`Category`体系・AST組み立て・未使用変数の自己修復処理など)を知りたい場合は、コメントを充実させてある`cmd/amivm/`配下のソースコードを直接参照してください。
 
 ## 独自のGoコードを呼ぶ
 
@@ -169,7 +170,7 @@ ENDFUNC
 
 (`yourmodule`の中で、または`-o`が`yourmodule`配下を指すようにして)`amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt`を実行すると、`import xxrt "yourmodule/xxrt"`が既に入った`hello.go`が生成され、そのまま`go build`できます。
 
-**メソッド呼び出し**(例: `file.Close()`、あるいは自分の型に定義したメソッド)も、レシーバーの型が標準ライブラリのものか自分で定義したものかに関わらず同じ手順です。`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出します。`(*os.File).Close`を例にした実例が[`test_ir/16_method_call.ir`](test_ir/16_method_call.ir)にあります。`FNTYPE`による厳密な型宣言が難しい場合は`METHVAL`/`FUNCVAL`(`test_ir/19_methval_funcval.ir`)で`:=`により取り出す方法もあります。既存メソッドの呼び出しではなく、自分の構造体にレシーバー付きメソッドそのものを**定義**する(Goのジェネリクスにも対応)には`FUNCM`/`ENDFUNCM`を使います(`test_ir/21_funcm_getype.ir`、インターフェースとの組み合わせは`test_ir/22_intype.ir`)。
+**メソッド呼び出し**(例: `file.Close()`、あるいは自分の型に定義したメソッド)も、レシーバーの型が標準ライブラリのものか自分で定義したものかに関わらず同じ手順です。`FNTYPE`でメソッドの関数型を宣言し、`FGET`で構造体変数からメソッド値を取り出し、その値を呼び出します。`(*os.File).Close`を例にした実例が[`examples/16_method_call.ir`](examples/16_method_call.ir)にあります。`FNTYPE`による厳密な型宣言が難しい場合は`METHVAL`/`FUNCVAL`(`examples/19_methval_funcval.ir`)で`:=`により取り出す方法もあります。既存メソッドの呼び出しではなく、自分の構造体にレシーバー付きメソッドそのものを**定義**する(Goのジェネリクスにも対応)には`FUNCM`/`ENDFUNCM`を使います(`examples/21_funcm_getype.ir`、インターフェースとの組み合わせは`examples/22_intype.ir`)。
 
 ## 制約
 
@@ -189,11 +190,10 @@ cmd/amivm/
   program.go                 トップレベルの組み立て(buildProgram)
   compile.go                 未使用変数の自己修復+Goソース出力パイプライン
   main.go                    エントリポイント(CLI引数解釈・main)
-docs/
-  amivm_spec.md               唯一の正確な仕様(プロジェクト概要+IR仕様の全体)
-  amivm_instruction_spec.md   amivm_spec.mdの解説版(設計判断の理由まで含む)
+amivm_spec.md               唯一の正確な仕様(プロジェクト概要+IR仕様の全体)
+amivm_instruction_spec.md   amivm_spec.mdの解説版(設計判断の理由まで含む)
 Makefile                    ビルド・テスト・クリーンアップ用タスク(`make help`で一覧表示)
-test_ir/                    命令カテゴリ別のサンプルIR
+examples/                   命令カテゴリ別のサンプルIR
 .github/workflows/test.yml  CI: push/PR時にgofmt/go vet/go test/make testを実行
 CLAUDE.md                   AIによる開発支援のためのプロジェクト規約
 LICENSE                     MIT

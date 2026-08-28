@@ -40,7 +40,7 @@ func buildProgram(source string) (*ast.File, error) {
 			}
 			body, next, _, err := parseBody(lines, i+1, defName, 0, []string{"ENDFUNC"})
 			if err != nil {
-				return nil, fmt.Errorf("関数 %s のパースに失敗: %w", defName, err)
+				return nil, fmt.Errorf("failed to parse function %s: %w", defName, err)
 			}
 			funcDecl := &ast.FuncDecl{
 				Name: ast.NewIdent(amivmFuncGoName(defName)),
@@ -61,7 +61,7 @@ func buildProgram(source string) (*ast.File, error) {
 			}
 			body, next, _, err := parseBody(lines, i+1, defName, 0, []string{"ENDFUNCM"})
 			if err != nil {
-				return nil, fmt.Errorf("メソッド %s のパースに失敗: %w", defName, err)
+				return nil, fmt.Errorf("failed to parse method %s: %w", defName, err)
 			}
 			funcDecl := &ast.FuncDecl{
 				Recv: &ast.FieldList{List: []*ast.Field{recv}},
@@ -115,15 +115,15 @@ func buildProgram(source string) (*ast.File, error) {
 			atoms := tokenizeAndClassify(line)
 			rest := atoms[1:]
 			if len(rest) == 0 {
-				return nil, fmt.Errorf("STTYPE構文が不正です(型名がありません): %s", line)
+				return nil, fmt.Errorf("invalid STTYPE syntax (missing type name): %s", line)
 			}
 			deftypeAtom := rest[0]
 			if err := checkKind(deftypeAtom, CatTypename); err != nil {
-				return nil, fmt.Errorf("STTYPEの型名が不正です: %w", err)
+				return nil, fmt.Errorf("invalid STTYPE type name: %w", err)
 			}
 			typeParams, err := parseTypeParamPairs(rest[1:])
 			if err != nil {
-				return nil, fmt.Errorf("STTYPEの型パラメータが不正です: %w", err)
+				return nil, fmt.Errorf("invalid STTYPE type parameter: %w", err)
 			}
 			structType, next, err := parseStructBlock(lines, i+1)
 			if err != nil {
@@ -136,15 +136,15 @@ func buildProgram(source string) (*ast.File, error) {
 			atoms := tokenizeAndClassify(line)
 			rest := atoms[1:]
 			if len(rest) == 0 {
-				return nil, fmt.Errorf("INTYPE構文が不正です(型名がありません): %s", line)
+				return nil, fmt.Errorf("invalid INTYPE syntax (missing type name): %s", line)
 			}
 			nameAtom := rest[0]
 			if err := checkKind(nameAtom, CatTypename); err != nil {
-				return nil, fmt.Errorf("INTYPEの型名が不正です: %w", err)
+				return nil, fmt.Errorf("invalid INTYPE type name: %w", err)
 			}
 			typeParams, err := parseTypeParamPairs(rest[1:])
 			if err != nil {
-				return nil, fmt.Errorf("INTYPEの型パラメータが不正です: %w", err)
+				return nil, fmt.Errorf("invalid INTYPE type parameter: %w", err)
 			}
 			ifaceType, next, err := parseInterfaceBlock(lines, i+1)
 			if err != nil {
@@ -163,7 +163,7 @@ func buildProgram(source string) (*ast.File, error) {
 			i++
 
 		default:
-			return nil, fmt.Errorf("トップレベルにはGVAR/FUNC/FUNCM/CHTYPE/SLTYPE/STTYPE/INTYPE/MPTYPE/FNTYPE/GETYPEのみ置けます。不正な行: %s", line)
+			return nil, fmt.Errorf("only GVAR/FUNC/FUNCM/CHTYPE/SLTYPE/STTYPE/INTYPE/MPTYPE/FNTYPE/GETYPE are allowed at the top level. invalid line: %s", line)
 		}
 	}
 

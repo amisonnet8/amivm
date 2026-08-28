@@ -38,15 +38,15 @@ const (
 )
 
 var categoryLabel = map[Category]string{
-	CatVa: "VAR変数名", CatGv: "GVAR変数名",
-	CatSingle: "単一左辺/チャネル変数", CatMulti: "複数左辺",
-	CatVariable: "変数参照", CatType: "型", CatTypename: "定義型・型パラメータ名",
-	CatConstraint: "型パラメータの制約", CatReceiver: "FUNCMのレシーバー型",
-	CatField: "構造体フィールド名", CatMethod: "メソッド名", CatPoint: "ADDRのフィールド/添字対象",
-	CatWhole: "0以上の整数", CatFromTo: "スライス範囲(from/to)",
-	CatInt: "整数", CatNumber: "数値", CatBool: "真偽値",
-	CatSlice: "スライス/文字列", CatOrder: "順序比較値", CatValue: "値",
-	CatDefname: "関数定義名", CatCallname: "呼び出し対象", CatLabel: "ラベル名",
+	CatVa: "VAR variable name", CatGv: "GVAR variable name",
+	CatSingle: "single left-hand side/channel variable", CatMulti: "multiple left-hand side",
+	CatVariable: "variable reference", CatType: "type", CatTypename: "defined type/type parameter name",
+	CatConstraint: "type parameter constraint", CatReceiver: "FUNCM receiver type",
+	CatField: "struct field name", CatMethod: "method name", CatPoint: "ADDR field/index target",
+	CatWhole: "non-negative integer", CatFromTo: "slice range (from/to)",
+	CatInt: "integer", CatNumber: "number", CatBool: "boolean",
+	CatSlice: "slice/string", CatOrder: "orderable comparison value", CatValue: "value",
+	CatDefname: "function definition name", CatCallname: "call target", CatLabel: "label name",
 }
 
 func kindSet(kinds ...Kind) map[Kind]bool {
@@ -149,16 +149,16 @@ func atomExpr(a Atom, funcName string, closureLevel int, cat Category) (ast.Expr
 // で安全に使える。
 func checkKind(a Atom, cat Category) error {
 	if a.Kind == KInvalid {
-		return fmt.Errorf("%sとして解釈できない形式です: %s", categoryLabel[cat], a.Raw)
+		return fmt.Errorf("unparseable format for %s: %s", categoryLabel[cat], a.Raw)
 	}
 	if !allowedKinds[cat][a.Kind] {
-		return fmt.Errorf("%sにこの形式は使えません: %s", categoryLabel[cat], a.Raw)
+		return fmt.Errorf("this format cannot be used for %s: %s", categoryLabel[cat], a.Raw)
 	}
 	// $0(FUNCMのレシーバー)は$Nが許容される全カテゴリで使えるが、single/multi
 	// (代入先・左辺値)だけは例外。レシーバー自体への再代入は認めない設計とするため、
 	// go/typesには委ねずここで構文的に弾く(Goの構文としては$0=...も合法なため)。
 	if a.Kind == KParam && a.A == "0" && (cat == CatSingle || cat == CatMulti) {
-		return fmt.Errorf("%sには$0(レシーバー)を使えません: %s", categoryLabel[cat], a.Raw)
+		return fmt.Errorf("$0 (receiver) cannot be used for %s: %s", categoryLabel[cat], a.Raw)
 	}
 	return nil
 }

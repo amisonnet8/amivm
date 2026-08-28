@@ -39,7 +39,7 @@ func closureParamGoName(level, n int) string {
 
 func paramBaseExpr(funcName, numStr string) (ast.Expr, error) {
 	if funcName == "" {
-		return nil, fmt.Errorf("$%sは関数定義の外では使えません", numStr)
+		return nil, fmt.Errorf("$%s cannot be used outside a function definition", numStr)
 	}
 	n, _ := strconv.Atoi(numStr)
 	if n == 0 {
@@ -61,7 +61,7 @@ func closureParamBaseExpr(a Atom, closureLevel int) ast.Expr {
 
 func localBaseExpr(funcName, name string) (ast.Expr, error) {
 	if funcName == "" {
-		return nil, fmt.Errorf("%%%sは関数定義の外では使えません", name)
+		return nil, fmt.Errorf("%%%s cannot be used outside a function definition", name)
 	}
 	return ast.NewIdent(amivmLocalGoName(funcName, name)), nil
 }
@@ -75,7 +75,7 @@ func globalSelBaseExpr(pkg, member string) ast.Expr {
 func arrayTypeExpr(sizeStr string, elt ast.Expr) (ast.Expr, error) {
 	n, err := strconv.Atoi(sizeStr)
 	if err != nil {
-		return nil, fmt.Errorf("配列サイズが不正です: %s", sizeStr)
+		return nil, fmt.Errorf("invalid array size: %s", sizeStr)
 	}
 	return &ast.ArrayType{Len: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(n)}, Elt: elt}, nil
 }
@@ -163,14 +163,14 @@ func atomToExpr(a Atom, funcName string, closureLevel int) (ast.Expr, error) {
 		return &ast.SelectorExpr{X: ast.NewIdent(a.A), Sel: ast.NewIdent(a.B)}, nil
 
 	default:
-		return nil, fmt.Errorf("解釈できない形式です: %s", a.Raw)
+		return nil, fmt.Errorf("unparseable format: %s", a.Raw)
 	}
 }
 
 // labelGoName はKLabelのAtomからGoの識別子として妥当なラベル名(#を除いた部分)を取り出す。
 func labelGoName(a Atom) (string, error) {
 	if a.Kind != KLabel {
-		return "", fmt.Errorf("ラベルにこの形式は使えません: %s", a.Raw)
+		return "", fmt.Errorf("this format cannot be used for a label: %s", a.Raw)
 	}
 	return a.A, nil
 }
@@ -184,6 +184,6 @@ func amivmFuncNameOf(a Atom) (string, error) {
 	case KAmivmFunc:
 		return a.A, nil
 	default:
-		return "", fmt.Errorf("関数名にこの形式は使えません: %s", a.Raw)
+		return "", fmt.Errorf("this format cannot be used for a function name: %s", a.Raw)
 	}
 }

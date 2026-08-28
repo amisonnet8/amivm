@@ -281,7 +281,7 @@ METHVAL	%closeFn	%f	<Close
 
 は`main_amivm_function_closeFn := main_amivm_function_f.Close`という**Goの`:=`(短い変数宣言)**を生成する。`FNTYPE`による型の事前宣言が一切不要になり、Goの型推論がメソッド値の型をそのまま引き受けるため、`FGET`パターンで起きうる型不一致が構造的に発生しない。
 
-この設計上の帰結として、`METHVAL`の代入先(`local`)は`FGET`の`single1`とは異なり、**`VAR`で事前宣言してはいけない**。`:=`はGoの構文上「左辺の少なくとも1つが新規変数であること」を要求するため、既に`VAR`宣言済みの変数(や、そもそも`VAR`で宣言する概念のない`$N`/`&N`/`@xxx`)を左辺に使うと「no new variables on left side of :=」のようなコンパイルエラーになる。そのため`local`カテゴリは`%xxx`(`VAR`の宣言名と同じ形)だけを許すことで、`METHVAL`の代入先が常に「これから`:=`で新規宣言する名前」になるようにしている(5節参照)。裏を返せば、`FGET`による方法(`FNTYPE`の型が実際のメソッド値の型と厳密に一致することが確認できている場合)と`METHVAL`による方法(型を気にせずGoに任せたい場合)は、状況に応じてどちらを使ってもよい。`test_ir/16_method_call.ir`が`FGET`、`test_ir/19_methval_funcval.ir`が`METHVAL`の実例。
+この設計上の帰結として、`METHVAL`の代入先(`local`)は`FGET`の`single1`とは異なり、**`VAR`で事前宣言してはいけない**。`:=`はGoの構文上「左辺の少なくとも1つが新規変数であること」を要求するため、既に`VAR`宣言済みの変数(や、そもそも`VAR`で宣言する概念のない`$N`/`&N`/`@xxx`)を左辺に使うと「no new variables on left side of :=」のようなコンパイルエラーになる。そのため`local`カテゴリは`%xxx`(`VAR`の宣言名と同じ形)だけを許すことで、`METHVAL`の代入先が常に「これから`:=`で新規宣言する名前」になるようにしている(5節参照)。裏を返せば、`FGET`による方法(`FNTYPE`の型が実際のメソッド値の型と厳密に一致することが確認できている場合)と`METHVAL`による方法(型を気にせずGoに任せたい場合)は、状況に応じてどちらを使ってもよい。`examples/16_method_call.ir`が`FGET`、`examples/19_methval_funcval.ir`が`METHVAL`の実例。
 
 ### `FUNCVAL`によるレシーバー無し関数値の取得
 
@@ -364,7 +364,7 @@ INTYPE	^KVStore	^K	^comparable	^V	^any
 ENDINTYPE
 ```
 
-は`type KVStore[K comparable, V any] interface { get(K) (V); set(K, V) }`を生成する。ある構造体が`INTYPE`宣言のインタフェースを満たすかどうかはGoの構造的部分型付けによって自動的に決まり、AMIVM側では検証しない(12節の設計方針どおり)。`test_ir/22_intype.ir`に、`FUNCM`で実装した構造体をインタフェース型の変数へ代入し、`METHVAL`でメソッド値を取り出して呼ぶ(ポリモーフィズムの)実例がある。
+は`type KVStore[K comparable, V any] interface { get(K) (V); set(K, V) }`を生成する。ある構造体が`INTYPE`宣言のインタフェースを満たすかどうかはGoの構造的部分型付けによって自動的に決まり、AMIVM側では検証しない(12節の設計方針どおり)。`examples/22_intype.ir`に、`FUNCM`で実装した構造体をインタフェース型の変数へ代入し、`METHVAL`でメソッド値を取り出して呼ぶ(ポリモーフィズムの)実例がある。
 
 ## 11. ジェネリクス(型パラメータ・制約・明示的型引数・`GETYPE`)
 
@@ -386,7 +386,7 @@ CALL	%p1	%p2	:	!pair	^int	^string	:	42	"go"
 GETYPE	^BoxInt	^Box	^int
 ```
 
-は`type BoxInt = Box[int]`(Goの型エイリアス構文)を生成する。`ast.TypeSpec.Assign`という位置情報フィールドに非ゼロの`token.Pos`を入れるだけで、`go/printer`がエイリアス構文(`=`付き)で出力する(実際のソース上の位置を持たない組み立て済みASTでも問題なく機能する)。エイリアスなので`BoxInt`と`Box[int]`は同じ型として扱われ、`Box[int]`に定義した`FUNCM`のメソッド(`get_amivm_function`等)もそのまま`BoxInt`のメソッドとして使える。`test_ir/21_funcm_getype.ir`に実例がある。
+は`type BoxInt = Box[int]`(Goの型エイリアス構文)を生成する。`ast.TypeSpec.Assign`という位置情報フィールドに非ゼロの`token.Pos`を入れるだけで、`go/printer`がエイリアス構文(`=`付き)で出力する(実際のソース上の位置を持たない組み立て済みASTでも問題なく機能する)。エイリアスなので`BoxInt`と`Box[int]`は同じ型として扱われ、`Box[int]`に定義した`FUNCM`のメソッド(`get_amivm_function`等)もそのまま`BoxInt`のメソッドとして使える。`examples/21_funcm_getype.ir`に実例がある。
 
 ## 12. 組み込み関数・型変換
 
@@ -414,7 +414,7 @@ ENDCLOS
 CALL	%result	:	%adder	1	2
 ```
 
-代入先は`%xxx`(ローカル変数)に限らない。関数パラメータ(`$N`)をクロージャーで差し替えたり、パッケージレベル変数(`@xxx`)にクロージャーを代入することもできる(後者はそのまま`callname`として`@xxx`を使って呼び出せる)。`test_ir/15_closure.ir`に実例がある。
+代入先は`%xxx`(ローカル変数)に限らない。関数パラメータ(`$N`)をクロージャーで差し替えたり、パッケージレベル変数(`@xxx`)にクロージャーを代入することもできる(後者はそのまま`callname`として`@xxx`を使って呼び出せる)。`examples/15_closure.ir`に実例がある。
 
 ```
 CLOS	@globalAdder	^int	^int	:	^int

@@ -21,7 +21,7 @@ func joinRaw(atoms []Atom) string {
 
 func expectArgs(kw string, atoms []Atom, n int) error {
 	if len(atoms) != n {
-		return fmt.Errorf("%s構文が不正です(引数の数が合いません): %s %s", kw, kw, joinRaw(atoms))
+		return fmt.Errorf("invalid %s syntax (wrong number of arguments): %s %s", kw, kw, joinRaw(atoms))
 	}
 	return nil
 }
@@ -33,13 +33,13 @@ func splitColon(atoms []Atom) (left, right []Atom, err error) {
 	for i, a := range atoms {
 		if a.Kind == KColon {
 			if idx >= 0 {
-				return nil, nil, fmt.Errorf("コロン(:)は1つだけ指定してください: %s", joinRaw(atoms))
+				return nil, nil, fmt.Errorf("specify exactly one colon (:): %s", joinRaw(atoms))
 			}
 			idx = i
 		}
 	}
 	if idx < 0 {
-		return nil, nil, fmt.Errorf("コロン(:)が見つかりません: %s", joinRaw(atoms))
+		return nil, nil, fmt.Errorf("colon (:) not found: %s", joinRaw(atoms))
 	}
 	return atoms[:idx], atoms[idx+1:], nil
 }
@@ -139,7 +139,7 @@ func parseSingleLine(line, funcName string, closureLevel int) (ast.Stmt, error) 
 	case "MPKEYS":
 		return parseMpKeys(rest, funcName, closureLevel)
 	default:
-		return nil, fmt.Errorf("未知の命令です: %s", line)
+		return nil, fmt.Errorf("unknown instruction: %s", line)
 	}
 }
 
@@ -148,14 +148,14 @@ func parseVar(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error)
 		return nil, err
 	}
 	if funcName == "" {
-		return nil, fmt.Errorf("VARは関数内でのみ使えます(トップレベルはGVARを使ってください)")
+		return nil, fmt.Errorf("VAR can only be used inside a function (use GVAR at the top level)")
 	}
 	if err := checkKind(atoms[0], CatVa); err != nil {
-		return nil, fmt.Errorf("VARの変数名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid VAR variable name: %w", err)
 	}
 	typExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("VARの型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid VAR type: %w", err)
 	}
 	goName := amivmLocalGoName(funcName, atoms[0].A)
 	return &ast.DeclStmt{
@@ -173,11 +173,11 @@ func parseGvar(atoms []Atom) (ast.Decl, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatGv); err != nil {
-		return nil, fmt.Errorf("GVARの変数名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid GVAR variable name: %w", err)
 	}
 	typExpr, err := atomExpr(atoms[1], "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("GVARの型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid GVAR type: %w", err)
 	}
 	return &ast.GenDecl{
 		Tok: token.VAR,
@@ -193,11 +193,11 @@ func parseSet(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error)
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("SETの左辺が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SET left-hand side: %w", err)
 	}
 	rhs, err := atomExpr(atoms[1], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("SETの右辺が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SET right-hand side: %w", err)
 	}
 	return &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{rhs}}, nil
 }
@@ -208,15 +208,15 @@ func parseAset(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	arr, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("ASETの配列が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ASET array: %w", err)
 	}
 	idx, err := atomExpr(atoms[1], funcName, closureLevel, CatWhole)
 	if err != nil {
-		return nil, fmt.Errorf("ASETの添字が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ASET index: %w", err)
 	}
 	val, err := atomExpr(atoms[2], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("ASETの値が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ASET value: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{&ast.IndexExpr{X: arr, Index: idx}}, Tok: token.ASSIGN,
@@ -230,15 +230,15 @@ func parseAget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("AGETの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid AGET assignment target: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("AGETの配列が不正です: %w", err)
+		return nil, fmt.Errorf("invalid AGET array: %w", err)
 	}
 	idx, err := atomExpr(atoms[2], funcName, closureLevel, CatWhole)
 	if err != nil {
-		return nil, fmt.Errorf("AGETの添字が不正です: %w", err)
+		return nil, fmt.Errorf("invalid AGET index: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
@@ -252,11 +252,11 @@ func parsePset(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	ptr, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("PSETのポインタが不正です: %w", err)
+		return nil, fmt.Errorf("invalid PSET pointer: %w", err)
 	}
 	val, err := atomExpr(atoms[1], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("PSETの値が不正です: %w", err)
+		return nil, fmt.Errorf("invalid PSET value: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{&ast.StarExpr{X: ptr}}, Tok: token.ASSIGN,
@@ -270,11 +270,11 @@ func parsePget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("PGETの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid PGET assignment target: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("PGETのポインタが不正です: %w", err)
+		return nil, fmt.Errorf("invalid PGET pointer: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
@@ -289,29 +289,29 @@ func parsePget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 // (AMIVM側では検証しない。意味の正しさをgo/typesに委ねる設計方針どおり)。
 func parseAddr(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) < 2 || len(atoms) > 3 {
-		return nil, fmt.Errorf("ADDR構文が不正です(書式: ADDR single variable (point)): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid ADDR syntax (format: ADDR single variable (point)): %s", joinRaw(atoms))
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("ADDRの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ADDR assignment target: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("ADDRの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ADDR target: %w", err)
 	}
 
 	var target ast.Expr = variable
 	if len(atoms) == 3 {
 		pointAtom := atoms[2]
 		if err := checkKind(pointAtom, CatPoint); err != nil {
-			return nil, fmt.Errorf("ADDRのpointが不正です: %w", err)
+			return nil, fmt.Errorf("invalid ADDR point: %w", err)
 		}
 		if pointAtom.Kind == KField {
 			target = &ast.SelectorExpr{X: variable, Sel: ast.NewIdent(pointAtom.A)}
 		} else {
 			point, err := atomToExpr(pointAtom, funcName, closureLevel)
 			if err != nil {
-				return nil, fmt.Errorf("ADDRのpointが不正です: %w", err)
+				return nil, fmt.Errorf("invalid ADDR point: %w", err)
 			}
 			target = &ast.IndexExpr{X: variable, Index: point}
 		}
@@ -350,16 +350,16 @@ func parseBin2(kw string, atoms []Atom, funcName string, closureLevel int) (ast.
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("%sの左辺が不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s left-hand side: %w", kw, err)
 	}
 	cats := binOperandCategories[kw]
 	a, err := atomExpr(atoms[1], funcName, closureLevel, cats[0])
 	if err != nil {
-		return nil, fmt.Errorf("%sの第1オペランドが不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s first operand: %w", kw, err)
 	}
 	b, err := atomExpr(atoms[2], funcName, closureLevel, cats[1])
 	if err != nil {
-		return nil, fmt.Errorf("%sの第2オペランドが不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s second operand: %w", kw, err)
 	}
 	op := binOpTokens[kw]
 	return &ast.AssignStmt{
@@ -374,7 +374,7 @@ func parseUnary(kw string, atoms []Atom, funcName string, closureLevel int) (ast
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("%sの左辺が不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s left-hand side: %w", kw, err)
 	}
 	cat := CatBool
 	op := token.NOT
@@ -384,7 +384,7 @@ func parseUnary(kw string, atoms []Atom, funcName string, closureLevel int) (ast
 	}
 	a, err := atomExpr(atoms[1], funcName, closureLevel, cat)
 	if err != nil {
-		return nil, fmt.Errorf("%sのオペランドが不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s operand: %w", kw, err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
@@ -399,7 +399,7 @@ func parseLabel(atoms []Atom) (ast.Stmt, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatLabel); err != nil {
-		return nil, fmt.Errorf("LABEL名が不正です: %w", err)
+		return nil, fmt.Errorf("invalid LABEL name: %w", err)
 	}
 	name, err := labelGoName(atoms[0])
 	if err != nil {
@@ -413,7 +413,7 @@ func parseGoto(atoms []Atom) (ast.Stmt, error) {
 		return nil, err
 	}
 	if err := checkKind(atoms[0], CatLabel); err != nil {
-		return nil, fmt.Errorf("GOTOのラベルが不正です: %w", err)
+		return nil, fmt.Errorf("invalid GOTO label: %w", err)
 	}
 	name, err := labelGoName(atoms[0])
 	if err != nil {
@@ -443,7 +443,7 @@ func parseRet(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error)
 	for _, a := range atoms {
 		v, err := atomExpr(a, funcName, closureLevel, CatValue)
 		if err != nil {
-			return nil, fmt.Errorf("RETの戻り値が不正です: %w", err)
+			return nil, fmt.Errorf("invalid RET return value: %w", err)
 		}
 		results = append(results, v)
 	}
@@ -470,18 +470,18 @@ func typeExprList(atoms []Atom) ([]ast.Expr, error) {
 func buildCallExpr(callAtom Atom, typeArgAtoms []Atom, argAtoms []Atom, funcName string, closureLevel int) (*ast.CallExpr, error) {
 	fn, err := atomExpr(callAtom, funcName, closureLevel, CatCallname)
 	if err != nil {
-		return nil, fmt.Errorf("呼び出し対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid call target: %w", err)
 	}
 	typeArgs, err := typeExprList(typeArgAtoms)
 	if err != nil {
-		return nil, fmt.Errorf("型引数が不正です: %w", err)
+		return nil, fmt.Errorf("invalid type argument: %w", err)
 	}
 	fn = instantiateTypeExpr(fn, typeArgs)
 	var args []ast.Expr
 	for _, a := range argAtoms {
 		v, err := atomExpr(a, funcName, closureLevel, CatValue)
 		if err != nil {
-			return nil, fmt.Errorf("引数が不正です: %w", err)
+			return nil, fmt.Errorf("invalid argument: %w", err)
 		}
 		args = append(args, v)
 	}
@@ -500,10 +500,10 @@ func parseCall(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	case 3:
 		destAtoms, calleeAtoms, argAtoms = segments[0], segments[1], segments[2]
 	default:
-		return nil, fmt.Errorf("CALL構文が不正です: %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid CALL syntax: %s", joinRaw(atoms))
 	}
 	if len(calleeAtoms) == 0 {
-		return nil, fmt.Errorf("CALL構文が不正です(呼び出し対象がありません): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid CALL syntax (missing call target): %s", joinRaw(atoms))
 	}
 	callAtom, typeArgAtoms := calleeAtoms[0], calleeAtoms[1:]
 	if len(segments) == 2 {
@@ -525,7 +525,7 @@ func parseCall(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	for _, d := range destAtoms {
 		e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 		if err != nil {
-			return nil, fmt.Errorf("CALLの代入先が不正です: %w", err)
+			return nil, fmt.Errorf("invalid CALL assignment target: %w", err)
 		}
 		lhs = append(lhs, e)
 	}
@@ -536,7 +536,7 @@ func parseCall(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 // 解釈する。コロンが無ければ型引数無し、コロンが1個あればcallname直後が型引数になる。
 func parseDeferOrSpawn(kw string, atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) == 0 {
-		return nil, fmt.Errorf("%s構文が不正です(呼び出し対象がありません): %s", kw, kw)
+		return nil, fmt.Errorf("invalid %s syntax (missing call target): %s", kw, kw)
 	}
 	segments := splitByColons(atoms)
 	var calleeAtoms, typeArgAtoms, argAtoms []Atom
@@ -547,10 +547,10 @@ func parseDeferOrSpawn(kw string, atoms []Atom, funcName string, closureLevel in
 		calleeAtoms, argAtoms = segments[0], segments[1]
 		typeArgAtoms = calleeAtoms[1:]
 	default:
-		return nil, fmt.Errorf("%s構文が不正です: %s", kw, joinRaw(atoms))
+		return nil, fmt.Errorf("invalid %s syntax: %s", kw, joinRaw(atoms))
 	}
 	if len(calleeAtoms) == 0 {
-		return nil, fmt.Errorf("%s構文が不正です(呼び出し対象がありません): %s", kw, joinRaw(atoms))
+		return nil, fmt.Errorf("invalid %s syntax (missing call target): %s", kw, joinRaw(atoms))
 	}
 	callAtom := calleeAtoms[0]
 	if len(segments) == 1 {
@@ -572,15 +572,15 @@ func parseChOrSlMake(kw string, atoms []Atom, funcName string, closureLevel int)
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("%sの変数が不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s variable: %w", kw, err)
 	}
 	typExpr, err := atomExpr(atoms[1], "", 0, CatTypename)
 	if err != nil {
-		return nil, fmt.Errorf("%sの型が不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s type: %w", kw, err)
 	}
 	size, err := atomExpr(atoms[2], funcName, closureLevel, CatWhole)
 	if err != nil {
-		return nil, fmt.Errorf("%sのサイズが不正です: %w", kw, err)
+		return nil, fmt.Errorf("invalid %s size: %w", kw, err)
 	}
 	makeCall := &ast.CallExpr{Fun: ast.NewIdent("make"), Args: []ast.Expr{typExpr, size}}
 	return &ast.AssignStmt{
@@ -595,11 +595,11 @@ func parseMpMake(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("MPMAKEの変数が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPMAKE variable: %w", err)
 	}
 	typExpr, err := atomExpr(atoms[1], "", 0, CatTypename)
 	if err != nil {
-		return nil, fmt.Errorf("MPMAKEの型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPMAKE type: %w", err)
 	}
 	makeCall := &ast.CallExpr{Fun: ast.NewIdent("make"), Args: []ast.Expr{typExpr}}
 	return &ast.AssignStmt{
@@ -614,18 +614,18 @@ func parseChSend(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	}
 	ch, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("CHSENDのチャネルが不正です: %w", err)
+		return nil, fmt.Errorf("invalid CHSEND channel: %w", err)
 	}
 	v, err := atomExpr(atoms[1], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("CHSENDの送信値が不正です: %w", err)
+		return nil, fmt.Errorf("invalid CHSEND send value: %w", err)
 	}
 	return &ast.SendStmt{Chan: ch, Value: v}, nil
 }
 
 func parseChRecv(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) < 2 || len(atoms) > 3 {
-		return nil, fmt.Errorf("CHRECV構文が不正です(書式: CHRECV l1 (l2) cs): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid CHRECV syntax (format: CHRECV l1 (l2) cs): %s", joinRaw(atoms))
 	}
 	destAtoms := atoms[:len(atoms)-1]
 	chAtom := atoms[len(atoms)-1]
@@ -634,13 +634,13 @@ func parseChRecv(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	for _, d := range destAtoms {
 		e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 		if err != nil {
-			return nil, fmt.Errorf("CHRECVの代入先が不正です: %w", err)
+			return nil, fmt.Errorf("invalid CHRECV assignment target: %w", err)
 		}
 		lhs = append(lhs, e)
 	}
 	ch, err := atomExpr(chAtom, funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("CHRECVのチャネルが不正です: %w", err)
+		return nil, fmt.Errorf("invalid CHRECV channel: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: lhs, Tok: token.ASSIGN,
@@ -650,17 +650,17 @@ func parseChRecv(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 
 func parseConcat(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) < 3 {
-		return nil, fmt.Errorf("CONCAT構文が不正です(書式: CONCAT l1 s1 s2 ...): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid CONCAT syntax (format: CONCAT l1 s1 s2 ...): %s", joinRaw(atoms))
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("CONCATの左辺が不正です: %w", err)
+		return nil, fmt.Errorf("invalid CONCAT left-hand side: %w", err)
 	}
 	var parts []ast.Expr
 	for _, a := range atoms[1:] {
 		v, err := atomExpr(a, funcName, closureLevel, CatSlice)
 		if err != nil {
-			return nil, fmt.Errorf("CONCATのオペランドが不正です: %w", err)
+			return nil, fmt.Errorf("invalid CONCAT operand: %w", err)
 		}
 		parts = append(parts, v)
 	}
@@ -677,21 +677,21 @@ func parseSlice(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, erro
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("SLICEの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLICE assignment target: %w", err)
 	}
 	src, err := atomExpr(atoms[1], funcName, closureLevel, CatSlice)
 	if err != nil {
-		return nil, fmt.Errorf("SLICEの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLICE target: %w", err)
 	}
 	var low, high ast.Expr
 	if _, err := atomExpr(atoms[2], funcName, closureLevel, CatFromTo); err != nil {
-		return nil, fmt.Errorf("SLICEのfromが不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLICE from: %w", err)
 	}
 	if atoms[2].Kind != KBlank {
 		low, _ = atomToExpr(atoms[2], funcName, closureLevel)
 	}
 	if _, err := atomExpr(atoms[3], funcName, closureLevel, CatFromTo); err != nil {
-		return nil, fmt.Errorf("SLICEのtoが不正です: %w", err)
+		return nil, fmt.Errorf("invalid SLICE to: %w", err)
 	}
 	if atoms[3].Kind != KBlank {
 		high, _ = atomToExpr(atoms[3], funcName, closureLevel)
@@ -708,14 +708,14 @@ func parseFset(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	obj, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("FSETの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FSET target: %w", err)
 	}
 	if atoms[1].Kind != KField {
-		return nil, fmt.Errorf("FSETのフィールド名が不正です: %s", atoms[1].Raw)
+		return nil, fmt.Errorf("invalid FSET field name: %s", atoms[1].Raw)
 	}
 	val, err := atomExpr(atoms[2], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("FSETの値が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FSET value: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{&ast.SelectorExpr{X: obj, Sel: ast.NewIdent(atoms[1].A)}}, Tok: token.ASSIGN,
@@ -729,14 +729,14 @@ func parseFget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("FGETの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FGET assignment target: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("FGETの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FGET target: %w", err)
 	}
 	if atoms[2].Kind != KField {
-		return nil, fmt.Errorf("FGETのフィールド名が不正です: %s", atoms[2].Raw)
+		return nil, fmt.Errorf("invalid FGET field name: %s", atoms[2].Raw)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN,
@@ -756,14 +756,14 @@ func parseMethval(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, er
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatVa)
 	if err != nil {
-		return nil, fmt.Errorf("METHVALの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid METHVAL assignment target: %w", err)
 	}
 	variable, err := atomExpr(atoms[1], funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("METHVALの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid METHVAL target: %w", err)
 	}
 	if atoms[2].Kind != KMethod {
-		return nil, fmt.Errorf("METHVALのメソッド名が不正です: %s", atoms[2].Raw)
+		return nil, fmt.Errorf("invalid METHVAL method name: %s", atoms[2].Raw)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.DEFINE,
@@ -782,11 +782,11 @@ func parseFuncval(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, er
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatVa)
 	if err != nil {
-		return nil, fmt.Errorf("FUNCVALの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FUNCVAL assignment target: %w", err)
 	}
 	rhs, err := atomExpr(atoms[1], funcName, closureLevel, CatCallname)
 	if err != nil {
-		return nil, fmt.Errorf("FUNCVALの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid FUNCVAL target: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{lhs}, Tok: token.DEFINE,
@@ -800,15 +800,15 @@ func parseMset(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	}
 	m, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("MSETのmapが不正です: %w", err)
+		return nil, fmt.Errorf("invalid MSET map: %w", err)
 	}
 	key, err := atomExpr(atoms[1], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("MSETのキーが不正です: %w", err)
+		return nil, fmt.Errorf("invalid MSET key: %w", err)
 	}
 	val, err := atomExpr(atoms[2], funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("MSETの値が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MSET value: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{&ast.IndexExpr{X: m, Index: key}}, Tok: token.ASSIGN,
@@ -818,7 +818,7 @@ func parseMset(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 
 func parseMget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) < 3 || len(atoms) > 4 {
-		return nil, fmt.Errorf("MGET構文が不正です(書式: MGET l1 (l2) m v1): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid MGET syntax (format: MGET l1 (l2) m v1): %s", joinRaw(atoms))
 	}
 	valueAtom := atoms[len(atoms)-1]
 	mapAtom := atoms[len(atoms)-2]
@@ -828,17 +828,17 @@ func parseMget(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error
 	for _, d := range destAtoms {
 		e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 		if err != nil {
-			return nil, fmt.Errorf("MGETの代入先が不正です: %w", err)
+			return nil, fmt.Errorf("invalid MGET assignment target: %w", err)
 		}
 		lhs = append(lhs, e)
 	}
 	m, err := atomExpr(mapAtom, funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("MGETのmapが不正です: %w", err)
+		return nil, fmt.Errorf("invalid MGET map: %w", err)
 	}
 	key, err := atomExpr(valueAtom, funcName, closureLevel, CatValue)
 	if err != nil {
-		return nil, fmt.Errorf("MGETのキーが不正です: %w", err)
+		return nil, fmt.Errorf("invalid MGET key: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: lhs, Tok: token.ASSIGN,
@@ -855,11 +855,11 @@ func parseMpKeys(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	}
 	lhs, err := atomExpr(atoms[0], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("MPKEYSの代入先が不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPKEYS assignment target: %w", err)
 	}
 	m, err := atomExpr(atoms[1], funcName, closureLevel, CatSingle)
 	if err != nil {
-		return nil, fmt.Errorf("MPKEYSのmapが不正です: %w", err)
+		return nil, fmt.Errorf("invalid MPKEYS map: %w", err)
 	}
 	keysCall := &ast.CallExpr{
 		Fun:  &ast.SelectorExpr{X: ast.NewIdent("maps"), Sel: ast.NewIdent("Keys")},
@@ -880,7 +880,7 @@ func parseMpKeys(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 // 指定時は2つ目がok値になり失敗してもpanicしない(Goの型アサーションと同じ)。
 func parseAssert(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, error) {
 	if len(atoms) < 3 || len(atoms) > 4 {
-		return nil, fmt.Errorf("ASSERT構文が不正です(書式: ASSERT l1 (l2) variable type1): %s", joinRaw(atoms))
+		return nil, fmt.Errorf("invalid ASSERT syntax (format: ASSERT l1 (l2) variable type1): %s", joinRaw(atoms))
 	}
 	typeAtom := atoms[len(atoms)-1]
 	variableAtom := atoms[len(atoms)-2]
@@ -890,17 +890,17 @@ func parseAssert(atoms []Atom, funcName string, closureLevel int) (ast.Stmt, err
 	for _, d := range destAtoms {
 		e, err := atomExpr(d, funcName, closureLevel, CatMulti)
 		if err != nil {
-			return nil, fmt.Errorf("ASSERTの代入先が不正です: %w", err)
+			return nil, fmt.Errorf("invalid ASSERT assignment target: %w", err)
 		}
 		lhs = append(lhs, e)
 	}
 	variable, err := atomExpr(variableAtom, funcName, closureLevel, CatVariable)
 	if err != nil {
-		return nil, fmt.Errorf("ASSERTの対象が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ASSERT target: %w", err)
 	}
 	typExpr, err := atomExpr(typeAtom, "", 0, CatType)
 	if err != nil {
-		return nil, fmt.Errorf("ASSERTの型が不正です: %w", err)
+		return nil, fmt.Errorf("invalid ASSERT type: %w", err)
 	}
 	return &ast.AssignStmt{
 		Lhs: lhs, Tok: token.ASSIGN,

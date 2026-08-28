@@ -31,5 +31,5 @@ jobs:
       - name: go test
         run: go test ./...
 
-      - name: make test (test_ir)
+      - name: make test (examples)
         run: make test

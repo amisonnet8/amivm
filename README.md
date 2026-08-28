@@ -34,7 +34,7 @@ AMIVM's own responsibility stops at emitting a Go source file. Turning that file
 go build -o amivm ./cmd/amivm
 ```
 
-or, using the provided `Makefile` (`make help` lists all targets, including `test`, which runs every example under `test_ir/` through the compiler):
+or, using the provided `Makefile` (`make help` lists all targets, including `test`, which runs every example under `examples/` through the compiler):
 
 ```sh
 make build
@@ -59,13 +59,14 @@ Re-running `make install` after changes immediately updates the `amivm` the othe
 ## Usage
 
 ```
-amivm <ir-file> [-o|--output <output-file>] [-v|--verbose] [-i|--import <name>=<import-path>]...
+amivm <ir-file> [-o|--output <output-file>] [-v|--verbose] [-i|--import <name>=<import-path>]... [-h|--help]
 ```
 
 | Option | Description |
 |---|---|
 | `-o <output-file>`, `--output <output-file>` | Where to write the generated Go file. If omitted, the output path is derived from `<ir-file>` by replacing its extension with `.go` (or appending `.go` if it has none). |
 | `-v`, `--verbose` | Print progress (the source IR, self-healing steps, the final generated code, a success message). Without it, the command is silent on success — only errors are ever printed, with or without `-v`. |
+| `-h`, `--help` | Print usage information and exit. Takes priority over every other flag, so `amivm -h` works even without an `<ir-file>`. |
 | `-i <name>=<import-path>`, `--import <name>=<import-path>` | Repeatable. Adds an explicit, aliased `import <name> "<import-path>"` to the generated file up front, so a `?<name>.Func` call resolves to it directly instead of relying on goimports to guess the import path from the bare identifier — a guess that's only reliable for the standard library and packages already referenced elsewhere. Useful for calling into a custom Go library a downstream project (e.g. a language front end targeting AMIVM-IR) provides. Names that end up unused in the generated code are dropped automatically, so the same set of `-i`/`--import` flags can safely be reused across every IR file. |
 
 ## Example
@@ -81,7 +82,7 @@ ENDFUNC
 $ amivm hello.ir -v
 === IR ===
 ...
-=== 最終生成コード ===
+=== final generated code ===
 package main
 
 import "fmt"
@@ -91,12 +92,12 @@ func main() {
 	return
 }
 
-生成成功: hello.go
+generated successfully: hello.go
 $ go run hello.go
 Hello, AMIVM!
 ```
 
-More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, type assertions, `METHVAL`/`FUNCVAL`, generic functions, generic `FUNCM` methods with `GETYPE`, and `INTYPE` interfaces), live in [`test_ir/`](test_ir/).
+More runnable examples covering every instruction, grouped by topic (variables, arithmetic, bitwise/shift/logical/comparison ops, strings, pointers, arrays with `GOTO`-based loops, functions and `DEFER`, goroutines/channels/`SEL`, slices, structs, maps, closures, Go method calls, structured `IF`/`LOOP` control flow, type assertions, `METHVAL`/`FUNCVAL`, generic functions, generic `FUNCM` methods with `GETYPE`, and `INTYPE` interfaces), live in [`examples/`](examples/).
 
 ## The IR language, briefly
 
@@ -137,7 +138,7 @@ Instructions are grouped roughly into:
 
 Method calls (e.g. `file.Close()`) are expressed by declaring the method's function type with `FNTYPE`, then pulling the bound method value out of a struct value with `FGET`, and calling that value — or, when `FNTYPE`'s declared type doesn't line up exactly with Go's real method-value type, `METHVAL`/`FUNCVAL` pull the value out via `:=` instead, letting Go infer the type. To *define* a method on your own `STTYPE`-declared struct (rather than just calling an existing one), use `FUNCM`.
 
-The **only authoritative specification is [`docs/amivm_spec.md`](docs/amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`docs/amivm_instruction_spec.md`](docs/amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), read the source under `cmd/amivm/` directly — it's commented throughout.
+The **only authoritative specification is [`amivm_spec.md`](amivm_spec.md)**. If any other document (including this README) disagrees with it, `amivm_spec.md` wins. For a more readable, annotated walkthrough of the same spec (including the reasoning behind design decisions), see [`amivm_instruction_spec.md`](amivm_instruction_spec.md). For how the compiler itself is built internally (tokenizing, the `Kind`/`Category` system, AST assembly, the unused-variable self-healing pass, etc.), read the source under `cmd/amivm/` directly — it's commented throughout.
 
 ## Calling your own Go code
 
@@ -169,7 +170,7 @@ ENDFUNC
 
 running `amivm hello.ir -o hello.go -i xxrt=yourmodule/xxrt` (from inside `yourmodule`, or with `-o` pointing into it) generates a `hello.go` with `import xxrt "yourmodule/xxrt"` already in place, ready for `go build`.
 
-**Calling methods** (e.g. `file.Close()`, or a method on your own type) works the same way regardless of whether the receiver type is a stdlib type or your own: declare the method's function type with `FNTYPE`, pull the bound method value out of a struct value with `FGET`, and call that value — see [`test_ir/16_method_call.ir`](test_ir/16_method_call.ir) for a worked example against `(*os.File).Close`. When the exact method-value type is hard to pin down with `FNTYPE`, `METHVAL`/`FUNCVAL` (`test_ir/19_methval_funcval.ir`) pull the value out via `:=` instead. **Defining** a method with a receiver on your own struct — as opposed to just calling an existing one — is `FUNCM`/`ENDFUNCM`, which also supports Go generics via type parameters declared on `STTYPE`/`INTYPE` (`test_ir/21_funcm_getype.ir`, `test_ir/22_intype.ir`).
+**Calling methods** (e.g. `file.Close()`, or a method on your own type) works the same way regardless of whether the receiver type is a stdlib type or your own: declare the method's function type with `FNTYPE`, pull the bound method value out of a struct value with `FGET`, and call that value — see [`examples/16_method_call.ir`](examples/16_method_call.ir) for a worked example against `(*os.File).Close`. When the exact method-value type is hard to pin down with `FNTYPE`, `METHVAL`/`FUNCVAL` (`examples/19_methval_funcval.ir`) pull the value out via `:=` instead. **Defining** a method with a receiver on your own struct — as opposed to just calling an existing one — is `FUNCM`/`ENDFUNCM`, which also supports Go generics via type parameters declared on `STTYPE`/`INTYPE` (`examples/21_funcm_getype.ir`, `examples/22_intype.ir`).
 
 ## Constraints
 
@@ -189,11 +190,10 @@ cmd/amivm/
   program.go                 top-level assembly (buildProgram)
   compile.go                 unused-variable self-healing + the Go source output pipeline
   main.go                    entry point (CLI arg parsing, main)
-docs/
-  amivm_spec.md               the authoritative specification (project overview + full IR reference)
-  amivm_instruction_spec.md   annotated walkthrough of amivm_spec.md, with design rationale
+amivm_spec.md               the authoritative specification (project overview + full IR reference)
+amivm_instruction_spec.md   annotated walkthrough of amivm_spec.md, with design rationale
 Makefile                    build/test/clean tasks (`make help` for the full list)
-test_ir/                    example IR programs, one file per instruction group
+examples/                   example IR programs, one file per instruction group
 .github/workflows/test.yml  CI: gofmt/go vet/go test/make test on push and PR
 CLAUDE.md                   project conventions for AI-assisted development
 LICENSE                     MIT

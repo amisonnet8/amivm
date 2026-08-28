@@ -17,11 +17,11 @@ install: ## amivmバイナリをGOBIN($GOPATH/bin)へインストールする(xx
 unit-test: ## go testでcmd/amivm配下のユニットテストを実行する
 	$(GO) test ./...
 
-test: build unit-test ## unit-test + test_ir/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
+test: build unit-test ## unit-test + examples/配下の全IRファイルを変換できるか検証する(生成物は一時ディレクトリに書き出し、リポジトリは汚さない)
 	@set -e; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT; \
-	for ir in test_ir/*.ir; do \
+	for ir in examples/*.ir; do \
 		name=$$(basename "$$ir" .ir); \
 		echo "== $$ir =="; \
 		./$(BINARY) "$$ir" -o "$$tmp/$$name.go" -v; \
@@ -38,7 +38,7 @@ tidy: ## go.mod/go.sumを整理する
 
 clean: ## ビルド成果物・テスト時に取り違えて生成された.goファイルを削除する
 	rm -f $(BINARY)
-	rm -f test_ir/*.go
+	rm -f examples/*.go
 
 help: ## 使えるターゲット一覧を表示する
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \

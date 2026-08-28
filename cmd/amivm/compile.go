@@ -188,18 +188,18 @@ func compileOnce(file *ast.File, outputPath string) ([]byte, *ast.File, []string
 	fset := token.NewFileSet()
 	var buf bytes.Buffer
 	if err := format.Node(&buf, fset, file); err != nil {
-		return nil, nil, nil, fmt.Errorf("ast整形失敗: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to format ast: %w", err)
 	}
 
 	resolved, err := imports.Process(outputPath, buf.Bytes(), nil)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("import解決失敗: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to resolve imports: %w", err)
 	}
 
 	fset2 := token.NewFileSet()
 	parsedFile, err := parser.ParseFile(fset2, outputPath, resolved, parser.AllErrors)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("生成コードの構文エラー: %w", err)
+		return nil, nil, nil, fmt.Errorf("syntax error in generated code: %w", err)
 	}
 
 	unusedVars, otherErrs, err := typeCheck(outputPath, resolved)
@@ -207,7 +207,7 @@ func compileOnce(file *ast.File, outputPath string) ([]byte, *ast.File, []string
 		return nil, nil, nil, err
 	}
 	if len(otherErrs) > 0 {
-		return resolved, parsedFile, unusedVars, fmt.Errorf("型チェック失敗:\n%s", strings.Join(otherErrs, "\n"))
+		return resolved, parsedFile, unusedVars, fmt.Errorf("type check failed:\n%s", strings.Join(otherErrs, "\n"))
 	}
 	return resolved, parsedFile, unusedVars, nil
 }
@@ -224,7 +224,7 @@ func typeCheck(outputPath string, resolved []byte) (unusedVars []string, otherEr
 	// (相対パスのままだと出力先ファイルが存在しない扱いになり解決に失敗する)。
 	absOutputPath, err := filepath.Abs(outputPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("出力パスの解決に失敗: %w", err)
+		return nil, nil, fmt.Errorf("failed to resolve output path: %w", err)
 	}
 
 	cfg := &packages.Config{
@@ -235,10 +235,10 @@ func typeCheck(outputPath string, resolved []byte) (unusedVars []string, otherEr
 	}
 	pkgs, err := packages.Load(cfg, "file="+absOutputPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("パッケージ読み込み失敗: %w", err)
+		return nil, nil, fmt.Errorf("failed to load package: %w", err)
 	}
 	if len(pkgs) != 1 {
-		return nil, nil, fmt.Errorf("パッケージ読み込み失敗: 出力先のパッケージを特定できません(%s)", outputPath)
+		return nil, nil, fmt.Errorf("failed to load package: could not identify output package (%s)", outputPath)
 	}
 
 	for _, e := range pkgs[0].Errors {
@@ -273,25 +273,25 @@ func generateOutput(file *ast.File, outputPath string, verbose bool) error {
 
 		if len(unusedVars) == 0 {
 			if verbose {
-				fmt.Println("=== 最終生成コード ===")
+				fmt.Println("=== final generated code ===")
 				fmt.Println(string(resolved))
 			}
 			break
 		}
 
 		if verbose {
-			fmt.Printf("未使用変数を検出したため、%v に対して `_ = x` を挿入します\n", unusedVars)
+			fmt.Printf("detected unused variables; inserting `_ = x` for %v\n", unusedVars)
 		}
 		appendBlankAssignsTargeted(parsedFile, unusedVars)
 		current = parsedFile
 
 		if i == maxRetries-1 {
-			return fmt.Errorf("未使用変数の解消がループ上限(%d回)に達しました", maxRetries)
+			return fmt.Errorf("unused variable resolution reached the retry limit (%d attempts)", maxRetries)
 		}
 	}
 
 	if err := os.WriteFile(outputPath, resolved, 0644); err != nil {
-		return fmt.Errorf("書き出し失敗: %w", err)
+		return fmt.Errorf("failed to write output: %w", err)
 	}
 
 	return nil
