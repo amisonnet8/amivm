@@ -71,10 +71,21 @@ type Atom struct {
 // 正規表現(いずれもプレフィックス記号を剥がした「中身」に対して適用する)
 // =====================================================================
 
+// reBasedIntBody: 16進(0x/0X)・8進(0o/0O)・2進(0b/0B)の各整数リテラルの本体
+// (符号・10進部分は含まない)。桁区切りの_は基数プレフィックスの直後、または
+// 数字と数字の間にのみ許容する(先頭・末尾・_の連続は不可)。Goの整数リテラル構文
+// (Go 1.13以降)を素直に真似ている。旧式の先頭0だけによる8進表記(例: 0755)は
+// 0xxx/0ooo/0bbbとの視覚的な区別が付きにくく、意図的に非対応とする。
+const reBasedIntBody = `0[xX]_?[0-9a-fA-F](?:_?[0-9a-fA-F])*|0[oO]_?[0-7](?:_?[0-7])*|0[bB]_?[01](?:_?[01])*`
+
 var (
-	reZero     = regexp.MustCompile(`^0$`)
-	rePosInt   = regexp.MustCompile(`^[1-9]\d*$`)
-	reNegInt   = regexp.MustCompile(`^-\d+$`)
+	reZero = regexp.MustCompile(`^0$`)
+	// rePosInt: 10進(1-9に0-9が続く形。桁区切りの_可。先頭0は不可)、
+	// または16進・8進・2進リテラル(reBasedIntBody)。
+	rePosInt = regexp.MustCompile(`^(?:[1-9](?:_?[0-9])*|` + reBasedIntBody + `)$`)
+	// reNegInt: 上記いずれかに-を前置したもの。10進側はrePosIntと違い先頭0を
+	// 許容する(-007のような表記も従来どおり許容し、値の解釈はGo側に委ねる)。
+	reNegInt   = regexp.MustCompile(`^-(?:[0-9](?:_?[0-9])*|` + reBasedIntBody + `)$`)
 	reFloatLit = regexp.MustCompile(`^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$`)
 	// reRuneLit: 1文字そのまま(Unicode 1文字。Goのregexpはデフォルトでルーン単位に
 	// マッチするため、非ASCII文字も1文字として扱える)、またはGoの名前付きエスケープ

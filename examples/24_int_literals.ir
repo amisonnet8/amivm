@@ -1,0 +1,18 @@
+// 整数リテラルの拡張形式(16進/8進/2進、桁区切りの_)のテスト。
+// いずれもGoの整数リテラル構文をそのまま踏襲しており、生成コードにはそのまま出力される。
+FUNC	!main	:
+	VAR	%hex	^int
+	VAR	%oct	^int
+	VAR	%bin	^int
+	VAR	%sep	^int
+	VAR	%negHex	^int
+
+	SET	%hex	0x1A
+	SET	%oct	0o17
+	SET	%bin	0b101
+	SET	%sep	1_000_000
+	SET	%negHex	-0x1A
+
+	CALL	:	?fmt.Println	%hex	%oct	%bin	%sep	%negHex
+	RET
+ENDFUNC
